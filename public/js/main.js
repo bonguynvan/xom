@@ -1,0 +1,171 @@
+// The page: runs the xóm in a fixed-step loop and draws it. Mostly for watching: drag to look around,
+// wheel or pinch to zoom; left alone, the camera strolls by itself.
+import { clampView, drift, fit, panBy, wheelPixels, zoomAt } from './camera.js';
+import { hourOf } from './map.js';
+import { renderFrame } from './render.js';
+import { STEP_MS, createWorld, stepWorld } from './world.js';
+
+const MAX_STEPS_PER_FRAME = 40; // only guards a tab waking from sleep
+const IDLE_BEFORE_DRIFT_MS = 6000;
+const KEY_PAN = 60; // css px per arrow press
+
+const $ = (id) => document.getElementById(id);
+const canvas = $('street');
+const ctx = canvas.getContext('2d', { alpha: false });
+const makeCanvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }); // building bitmaps
+
+const VN_OFFSET_MS = 7 * 3600 * 1000;
+/** Now in Vietnam (UTC+7), whatever the visitor's own time zone: read it with the getUTC* methods. */
+const vnNow = () => new Date(Date.now() + VN_OFFSET_MS);
+const vnMinute = (d = vnNow()) => d.getUTCHours() * 60 + d.getUTCMinutes() + d.getUTCSeconds() / 60;
+const daySeed = (d = vnNow()) => d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+/** Real time unless the address asks to fast-forward (?tua=60: a minute of xóm per second). */
+const RATE = Math.max(1 / 60, Math.min(600, Number(new URLSearchParams(location.search).get('tua')) / 60 || 1 / 60));
+
+const state = {
+  world: createWorld({ seed: daySeed(), minute: vnMinute(), rate: RATE }),
+  prev: null,
+  acc: 0,
+  last: performance.now(),
+  view: null,
+  limits: null,
+  driftDir: 1,
+  lastInput: -Infinity,
+};
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, window.matchMedia('(pointer: coarse)').matches ? 1.5 : 2);
+  const { width, height } = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(width * dpr));
+  canvas.height = Math.max(1, Math.round(height * dpr));
+  const limits = fit(canvas.width, canvas.height);
+  const old = state.view;
+  // Keep looking at the same middle of the map, at the same zoom relative to the window.
+  const zoom = old && state.limits ? old.scale / state.limits.start : 1;
+  const scale = Math.max(limits.min, Math.min(limits.max, limits.start * zoom));
+  const cx = old ? old.camX + old.w / old.scale / 2 : 700;
+  const cy = old ? old.camY + old.h / old.scale / 2 : 330;
+  state.limits = limits;
+  state.view = clampView({ w: canvas.width, h: canvas.height, dpr, makeCanvas, scale, camX: cx - canvas.width / scale / 2, camY: cy - canvas.height / scale / 2 });
+}
+
+function advance(now) {
+  const real = Math.min(now - state.last, 1000);
+  state.last = now;
+  state.acc += real;
+  let steps = 0;
+  while (state.acc >= STEP_MS && steps < MAX_STEPS_PER_FRAME) {
+    state.prev = state.world;
+    state.world = stepWorld(state.world);
+    state.acc -= STEP_MS;
+    steps += 1;
+  }
+  if (steps === MAX_STEPS_PER_FRAME) state.acc = 0;
+  return real;
+}
+
+function frame(now) {
+  const real = advance(now);
+  if (now - state.lastInput > IDLE_BEFORE_DRIFT_MS && !reducedMotion.matches) {
+    const next = drift(state.view, state.driftDir, real);
+    state.view = next.view;
+    state.driftDir = next.dir;
+  }
+  renderFrame(ctx, state.world, state.prev, state.acc / STEP_MS, state.view);
+  showClock();
+  requestAnimationFrame(frame);
+}
+
+const PARTS = [[5, 'Sáng sớm'], [8, 'Sáng'], [11, 'Trưa'], [13.5, 'Chiều'], [18, 'Tối'], [22, 'Đêm']];
+function showClock() {
+  const hour = hourOf(state.world.minute);
+  const part = [...PARTS].reverse().find(([h]) => hour >= h)?.[1] ?? 'Đêm';
+  const text = `${String(Math.floor(hour)).padStart(2, '0')}:${String(Math.floor((hour % 1) * 60)).padStart(2, '0')} · ${part}`;
+  if ($('clock').textContent !== text) $('clock').textContent = text;
+}
+
+function touched() {
+  state.lastInput = performance.now();
+  $('hint').classList.add('gone');
+}
+
+// ---------------- input: drag to look around, wheel or pinch to zoom ----------------
+
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const pointers = new Map();
+const local = (e) => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * state.view.dpr, y: (e.clientY - r.top) * state.view.dpr }; };
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  touched();
+  pointers.set(e.pointerId, local(e));
+  try { canvas.setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
+  canvas.classList.add('dragging');
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  touched();
+  const before = pointers.get(e.pointerId);
+  const now = local(e);
+  if (pointers.size === 1) {
+    state.view = panBy(state.view, now.x - before.x, now.y - before.y);
+  } else {
+    // two fingers: zoom by their spread, and move with their midpoint
+    const other = [...pointers.entries()].find(([id]) => id !== e.pointerId)[1];
+    const factor = Math.hypot(now.x - other.x, now.y - other.y) / Math.max(1, Math.hypot(before.x - other.x, before.y - other.y));
+    const mid = { x: (now.x + other.x) / 2, y: (now.y + other.y) / 2 };
+    state.view = panBy(zoomAt(state.view, factor, mid.x, mid.y, state.limits), (now.x - before.x) / 2, (now.y - before.y) / 2);
+  }
+  pointers.set(e.pointerId, now);
+});
+const release = (e) => {
+  pointers.delete(e.pointerId);
+  if (pointers.size === 0) canvas.classList.remove('dragging');
+};
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('lostpointercapture', release);
+window.addEventListener('blur', () => { pointers.clear(); canvas.classList.remove('dragging'); });
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  touched();
+  const at = local(e);
+  state.view = zoomAt(state.view, Math.exp(-wheelPixels(e) / 500), at.x, at.y, state.limits);
+}, { passive: false });
+
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return; // leave the browser's own zoom alone
+  const pan = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+  const zoom = { '+': 1.25, '=': 1.25, '-': 0.8 }[e.key];
+  if (!pan && !zoom) return;
+  touched();
+  const d = KEY_PAN * state.view.dpr;
+  if (pan) state.view = panBy(state.view, pan[0] * d, pan[1] * d);
+  if (zoom) state.view = zoomAt(state.view, zoom, state.view.w / 2, state.view.h / 2, state.limits);
+});
+
+// ---------------- who else is watching (and any notice from the admin) ----------------
+
+function listen() {
+  if (!('EventSource' in window)) return;
+  const source = new EventSource('/api/live');
+  source.addEventListener('message', (event) => {
+    let data;
+    try { data = JSON.parse(event.data); } catch { return; }
+    const online = Number(data.online) || 0;
+    $('online').hidden = online < 1;
+    $('online').textContent = `👀 ${online.toLocaleString('vi-VN')} người đang xem`;
+    const notice = data.maintenance ? '🛠️ Xóm đang bảo trì một chút, mọi thứ vẫn chạy nhưng có thể khựng lại.' : '';
+    const text = [notice, typeof data.announcement === 'string' ? `📢 ${data.announcement}` : ''].filter(Boolean).join(' · ');
+    $('notice').hidden = !text;
+    $('notice').textContent = text;
+  });
+  source.addEventListener('error', () => { $('online').hidden = true; }); // EventSource retries by itself
+}
+listen();
+
+if (window.matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Kéo để xem quanh xóm · chụm hai ngón để phóng to';
+
+new ResizeObserver(resize).observe(canvas);
+resize();
+requestAnimationFrame((now) => { state.last = now; frame(now); });

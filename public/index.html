@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Xóm Peti · Một xóm nhỏ những năm 90</title>
+  <meta name="description" content="Một xóm Việt Nam những năm 90 nhìn từ trên cao: chợ, đình, ao làng, đường tàu, trà đá, loa phường… Cả nghìn người, mỗi người một cuộc sống, theo giờ thật Việt Nam. Cứ ngồi xem thôi.">
+  <meta property="og:title" content="Xóm Peti">
+  <meta property="og:description" content="Một xóm nhỏ những năm 90, cả nghìn người sống theo giờ thật. Cứ ngồi xem thôi.">
+  <meta name="theme-color" content="#fff6e5">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Be+Vietnam+Pro:wght@500;700;800&display=swap">
+  <link rel="stylesheet" href="/css/xom.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="https://peti.vn" title="Các trò khác của Peti"><span class="brand-mark" aria-hidden="true"></span>Xóm <em>Peti</em></a>
+    <span class="online" id="online" hidden aria-live="polite"></span>
+    <a class="github" href="https://github.com/bonguynvan/xom" target="_blank" rel="noopener" title="Mã nguồn mở, ai cũng đóng góp được">GitHub ↗</a>
+    <div class="clock" id="clock" aria-live="off">--:--</div>
+  </header>
+  <p class="notice" id="notice" hidden role="status"></p>
+
+  <main class="stage">
+    <canvas id="street" tabindex="0" aria-label="Bản đồ cả xóm. Kéo để xem quanh xóm, lăn chuột hoặc chụm hai ngón để phóng to."></canvas>
+    <p class="hint" id="hint">Kéo để xem quanh xóm · lăn chuột để phóng to</p>
+  </main>
+</body>
+</html>

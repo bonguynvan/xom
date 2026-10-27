@@ -1,0 +1,35 @@
+# Xóm Peti on the server, behind the machine's shared Caddy (deploy/xom.caddy goes into its sites folder).
+# A tiny Node server (no dependencies): the game's files, the live watcher count and the admin's API.
+# Run from the repo root (needs a .env with OPS_TOKEN, see .env.example):
+#   docker compose -f deploy/compose.yml up -d
+# A `git push` that only changes public/ is live at once (mounted read-only); server changes need a restart.
+name: xom
+
+services:
+  web:
+    image: node:24-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command: node scripts/serve.js
+    user: "10013:10013" # unprivileged; owns only data/
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 192m
+    pids_limit: 64
+    env_file: ../.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3500"
+      TRUST_PROXY: "1" # only the shared Caddy can reach the loopback port
+      STATS_FILE: /app/data/stats.json
+    volumes:
+      - ../public:/app/public:ro # only the site files, never .git or deploy/
+      - ../scripts:/app/scripts:ro
+      - ../package.json:/app/package.json:ro # "type": "module"
+      - ../data:/app/data
+    ports:
+      - "127.0.0.1:${XOM_PORT:-3500}:3500" # loopback only
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }

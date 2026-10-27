@@ -1,0 +1,13 @@
+{
+  "name": "xom",
+  "version": "0.1.0",
+  "description": "Xóm Peti: a 1990s Vietnamese street that lives on its own. Part of the Peti family of crowd games.",
+  "homepage": "https://xom.peti.vn",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=22" },
+  "license": "MIT"
+}
