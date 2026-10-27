@@ -3,6 +3,7 @@
 import { clampView, drift, fit, panBy, wheelPixels, zoomAt } from './camera.js';
 import { hourOf } from './map.js';
 import { renderFrame } from './render.js';
+import { createMusic } from './music.js';
 import { STEP_MS, createWorld, stepWorld } from './world.js';
 
 const MAX_STEPS_PER_FRAME = 40; // only guards a tab waking from sleep
@@ -163,6 +164,20 @@ function listen() {
   source.addEventListener('error', () => { $('online').hidden = true; }); // EventSource retries by itself
 }
 listen();
+
+// ---------------- music: lofi made in the browser, following the xóm's hour ----------------
+
+const music = createMusic({ hourOf: () => hourOf(state.world.minute), seed: daySeed() });
+$('music').addEventListener('click', async () => {
+  const on = !music.playing;
+  $('music').setAttribute('aria-pressed', String(on));
+  $('music').textContent = on ? '🎵 Tắt nhạc' : '🎵 Bật nhạc';
+  try {
+    if (on) await music.start(); else music.stop();
+  } catch {
+    $('music').textContent = '🎵 Không phát được nhạc';
+  }
+});
 
 if (window.matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Kéo để xem quanh xóm · chụm hai ngón để phóng to';
 

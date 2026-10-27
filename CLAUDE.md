@@ -43,6 +43,9 @@ No dependencies, no build step.
   crowd (~400 people on the pavement stools, in the market, kids on the bare ground) that is a pure function
   of the clock, not simulated. `meet()` uses a grid so a thousand walkers stay cheap. `sprites.js` caches the
   ground, every building and every resident pose as bitmaps (zoom ≤ 2); speech bubbles are capped per frame.
+- Music: `music.js` synthesises the lofi with Web Audio (no recordings) from `music-score.js` (pure, tested:
+  chords, ngũ cung melody, mood by hour); a 🎵 button starts it (browsers need a click). If
+  `public/music/lofi.mp3` exists it plays instead. Levels were measured with an analyser (rms ~0.09, peak ~0.5).
 - Time: the page runs in real time on Vietnam time (UTC+7, `vnNow()` in main.js) whatever the visitor's zone;
   `?tua=60` fast-forwards (a minute per second). `createWorld({ rate })` takes game minutes per real second.
 - `camera.js` (fit/cover, clamp, zoom at a point, pan, drift), `main.js` (loop, drag/pinch/wheel/keys).

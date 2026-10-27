@@ -56,7 +56,15 @@ body {
   background: var(--paper); color: var(--ink); font-weight: 800; font-size: 0.9rem; text-decoration: none; white-space: nowrap;
   box-shadow: 2px 2px 0 var(--ink); transition: translate 120ms var(--ease), box-shadow 120ms var(--ease);
 }
-.online[hidden] + .github { margin-left: auto; }
+.online[hidden] + .music { margin-left: auto; }
+.music {
+  padding: 4px 12px; border: 2px solid var(--ink); border-radius: 999px; cursor: pointer;
+  background: var(--paper); color: var(--ink); font: 800 0.9rem var(--font-body); white-space: nowrap;
+  box-shadow: 2px 2px 0 var(--ink); transition: translate 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+.music[aria-pressed="true"] { background: var(--sun); }
+.music:hover { translate: -1px -1px; box-shadow: 3px 3px 0 var(--ink); }
+.music:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 .github:hover { translate: -1px -1px; box-shadow: 3px 3px 0 var(--ink); }
 .github:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 .notice {
@@ -98,7 +106,7 @@ body {
   .brand-mark { width: 24px; height: 24px; }
   .clock { font-size: 1rem; padding: 2px 10px; }
   .top { flex-wrap: wrap; }
-  .online, .github { font-size: 0.78rem; padding: 2px 8px; }
+  .online, .github, .music { font-size: 0.78rem; padding: 2px 8px; }
   .notice { margin: 0 12px 8px; font-size: 0.85rem; }
   .stage { margin: 0 12px 12px; }
   .hint { font-size: 0.78rem; bottom: 10px; white-space: normal; width: max-content; max-width: calc(100% - 24px); text-align: center; }

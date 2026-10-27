@@ -17,6 +17,8 @@ npm test           # node:test, không cần cài gì
 - **Nhân vật mới**: vẽ painter trong `public/js/people90*.js` (quay mặt sang phải, gốc ở mặt đất, cao khoảng
   100 đơn vị, **không có chữ** vì nhân vật bị lật gương khi đi sang trái), thêm vào `PAINTERS`
   (`public/js/painters.js`) và một mục trong `CAST`.
+- **Nhạc**: chỉnh bản nhạc trong `public/js/music-score.js` (hợp âm, giai điệu, tâm trạng theo giờ), hoặc góp một
+  bản nhạc không lời bạn có quyền dùng dưới dạng `public/music/lofi.mp3` (ghi rõ nguồn và giấy phép trong PR).
 - **Chi tiết phố xá**: `public/js/facade.js` (mặt tiền nhà), `public/js/street-life.js`, `public/js/decor.js`.
 
 ## Quy ước

@@ -14,6 +14,10 @@ Chủ yếu để xem. Kéo để nhìn quanh xóm, lăn chuột (hoặc chụm 
 vài giây thì camera tự đi dạo. Xóm chạy theo giờ thật Việt Nam (UTC+7); thêm `?tua=60` vào địa chỉ để
 tua nhanh (một phút trong xóm mỗi giây). Mỗi ngày một "hạt giống" ngẫu nhiên mới.
 
+## Nhạc
+
+Bấm 🎵 để nghe lofi "mùa thu Hà Nội" tự sáng tác ngay trong trình duyệt (Web Audio, không dùng bản thu nào nên không vướng bản quyền): piano điện, bass, trống nhẹ, giai điệu ngũ cung kiểu đàn bầu, tiếng đĩa than; tối có mưa, khuya có dế. Nhạc đổi theo giờ trong xóm. Muốn dùng bản nhạc khác, bỏ file `public/music/lofi.mp3` vào (nhạc bạn có quyền dùng) là trang phát file đó thay thế.
+
 ## Chạy trên máy
 
 ```bash
@@ -35,6 +39,7 @@ Không có bước build, không có thư viện ngoài: ES modules thuần + ca
 | `public/js/duavit/` | Một số hình vẽ mượn từ Đua Vịt Peti (xem `public/js/duavit/VENDORED.md`) |
 | `public/js/facade.js`, `street-life.js` | Chất Việt Nam: tường vôi vàng, cửa chớp, chuồng cọp, cờ, biển viết tay; xe Cub đỗ vỉa hè, quán cóc, băng rôn, cổng xóm, lũy tre, cò |
 | `public/js/buildings.js`, `scenery.js`, `render.js` | Nhà (mặt tiền + mái), mặt đất, tàu, chợ, đình, ao, cây, đèn; ánh sáng theo giờ, bong bóng thoại |
+| `public/js/music.js`, `music-score.js` | Nhạc lofi tự tạo bằng Web Audio; bản nhạc (hợp âm, giai điệu ngũ cung, tâm trạng theo giờ) |
 | `public/js/camera.js`, `main.js` | Camera (kéo, phóng to), vòng lặp |
 | `scripts/serve.js`, `live.js` | Máy chủ Node nhỏ: file game, đếm người đang xem (`/api/live`), số liệu cho admin.peti.vn |
 | `deploy/` | Docker + khối site cho Caddy dùng chung (xem `deploy/README.md`) |
