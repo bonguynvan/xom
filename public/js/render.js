@@ -99,7 +99,10 @@ export function renderFrame(ctx, world, prev, alpha, view) {
 function bubble(ctx, text, sx, at, view, placed, angry = false) {
   const px = view.dpr ?? 1;
   ctx.font = `700 ${11 * px}px ${FONT}`;
-  const w = Math.min(200 * px, ctx.measureText(text).width + 14 * px);
+  const room = 200 * px - 14 * px;
+  let shown = text;
+  while (shown.length > 4 && ctx.measureText(shown).width > room) shown = `${shown.slice(0, -2).trimEnd()}…`.replace(/……$/, '…'); // too long: cut, never squash
+  const w = Math.min(200 * px, ctx.measureText(shown).width + 14 * px);
   const x = Math.max(4 * px, Math.min(sx - w / 2, view.w - w - 4 * px)); // never cut off at the edges
   let sy = at; // people chatting stand close: stack a bubble above one it would cover, else leave it out
   const hits = () => placed.some((b) => x < b.x + b.w && b.x < x + w && sy - 26 * px < b.y + 20 * px && b.y < sy - 6 * px);
@@ -115,7 +118,7 @@ function bubble(ctx, text, sx, at, view, placed, angry = false) {
   ctx.fillStyle = angry ? '#c1121f' : INK;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + w / 2, sy - 16 * px, w - 8 * px);
+  ctx.fillText(shown, x + w / 2, sy - 16 * px, w - 8 * px);
   return true;
 }
 

@@ -43,6 +43,9 @@ No dependencies, no build step.
   crowd (~400 people on the pavement stools, in the market, kids on the bare ground) that is a pure function
   of the clock, not simulated. `meet()` uses a grid so a thousand walkers stay cheap. `sprites.js` caches the
   ground, every building and every resident pose as bitmaps (zoom ≤ 2); speech bubbles are capped per frame.
+- Loa phường: the admin announcement (and maintenance) from /api/live crawls in a ticker top-left of the map
+  (CSS animation, speed set from the measured width) until it is cleared or replaced; the loudspeaker on its
+  pole reads it out as a bubble for 9 s every 45 s (main.js withAnnouncement). Long bubbles are cut with …
 - Music: `music.js` synthesises the lofi with Web Audio (no recordings) from `music-score.js` (pure, tested:
   chords, ngũ cung melody, mood by hour); a 🎵 button starts it (browsers need a click). If
   `public/music/lofi.mp3` exists it plays instead. Levels were measured with an analyser (rms ~0.09, peak ~0.5).

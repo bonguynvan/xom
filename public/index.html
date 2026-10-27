@@ -23,9 +23,12 @@
     <a class="github" href="https://github.com/bonguynvan/xom" target="_blank" rel="noopener" title="Mã nguồn mở, ai cũng đóng góp được">GitHub ↗</a>
     <div class="clock" id="clock" aria-live="off">--:--</div>
   </header>
-  <p class="notice" id="notice" hidden role="status"></p>
 
   <main class="stage">
+    <div class="loa" id="loa" hidden role="status">
+      <span class="loa-tag" aria-hidden="true">📢 Loa phường</span>
+      <span class="loa-window"><span class="loa-text" id="loa-text"></span></span>
+    </div>
     <canvas id="street" tabindex="0" aria-label="Bản đồ cả xóm. Kéo để xem quanh xóm, lăn chuột hoặc chụm hai ngón để phóng to."></canvas>
     <p class="hint" id="hint">Kéo để xem quanh xóm · lăn chuột để phóng to</p>
   </main>

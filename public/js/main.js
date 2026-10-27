@@ -32,6 +32,7 @@ const state = {
   limits: null,
   driftDir: 1,
   lastInput: -Infinity,
+  announcement: null,
 };
 
 function resize() {
@@ -72,9 +73,18 @@ function frame(now) {
     state.view = next.view;
     state.driftDir = next.dir;
   }
-  renderFrame(ctx, state.world, state.prev, state.acc / STEP_MS, state.view);
+  renderFrame(ctx, withAnnouncement(state.world, now), state.prev, state.acc / STEP_MS, state.view);
   showClock();
   requestAnimationFrame(frame);
+}
+
+const TICKER_SPEED = 45; // css px per second
+const READ_EVERY_MS = 45000; // the loudspeaker on its pole reads the admin's notice out now and then
+const READ_FOR_MS = 9000;
+/** Let the map's loudspeaker read the admin's announcement (when it is not busy with its own). */
+function withAnnouncement(world, now) {
+  if (!state.announcement || world.broadcast || now % READ_EVERY_MS > READ_FOR_MS) return world;
+  return { ...world, broadcast: { text: state.announcement } };
 }
 
 const PARTS = [[5, 'Sáng sớm'], [8, 'Sáng'], [11, 'Trưa'], [13.5, 'Chiều'], [18, 'Tối'], [22, 'Đêm']];
@@ -156,10 +166,16 @@ function listen() {
     const online = Number(data.online) || 0;
     $('online').hidden = online < 1;
     $('online').textContent = `👀 ${online.toLocaleString('vi-VN')} người đang xem`;
-    const notice = data.maintenance ? '🛠️ Xóm đang bảo trì một chút, mọi thứ vẫn chạy nhưng có thể khựng lại.' : '';
-    const text = [notice, typeof data.announcement === 'string' ? `📢 ${data.announcement}` : ''].filter(Boolean).join(' · ');
-    $('notice').hidden = !text;
-    $('notice').textContent = text;
+    state.announcement = typeof data.announcement === 'string' ? data.announcement : null;
+    const maintenance = data.maintenance ? 'Xóm đang bảo trì một chút, mọi thứ vẫn chạy nhưng có thể khựng lại.' : '';
+    const text = [state.announcement, maintenance].filter(Boolean).join('   ·   ');
+    $('loa').hidden = !text;
+    if ($('loa-text').textContent !== text) {
+      $('loa-text').textContent = text;
+      // A gentle, steady crawl whatever the length: the text travels the window plus itself at TICKER_SPEED.
+      const distance = $('loa-text').offsetWidth;
+      $('loa-text').style.animationDuration = `${Math.max(10, distance / TICKER_SPEED)}s`; // CSSOM: allowed by the CSP
+    }
   });
   source.addEventListener('error', () => { $('online').hidden = true; }); // EventSource retries by itself
 }
