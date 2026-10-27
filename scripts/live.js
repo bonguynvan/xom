@@ -8,17 +8,22 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 export const OPS_TOKEN_MIN = 32;
 const DAYS = 30;
 const PER_IP = 12; // tabs from one address (a whole office behind one IP is fine)
-const MAX_WATCHERS = 20000;
+const MAX_WATCHERS = 4000; // what the 192 MB container holds comfortably
+const VISIT_GAP_MS = 10 * 60 * 1000; // reopening the page within ten minutes is the same visit
+const SLOW_CLIENT_BYTES = 16 * 1024; // a stream nobody reads any more is dropped
 const PING_MS = 25000; // keeps proxies from closing an idle stream
 const ANNOUNCE_MAX = 200;
 
 const vnDay = (ms) => new Date(ms + 7 * 3600 * 1000).toISOString().slice(0, 10); // days turn over at midnight in Vietnam
 const digest = (value) => createHash('sha256').update(String(value)).digest();
+/** The caps count an IPv6 visitor by their /64 (one home or one server), an IPv4 one by the address. */
+export const ipKey = (ip) => (ip.includes(':') && !ip.startsWith('::ffff:') ? ip.split(':').slice(0, 4).join(':') : ip.replace(/^::ffff:/, ''));
 
 /** The live-watchers hub. `file` (optional) keeps the daily tally across restarts. */
 export function createLive({ token = '', file = null, now = () => Date.now(), startedAt = now() } = {}) {
   const watchers = new Set();
   const perIp = new Map();
+  const lastVisit = new Map(); // memory only, pruned; never written anywhere
   let settings = { maintenance: false, announcement: null };
   let days = load(file);
 
@@ -29,17 +34,24 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
   };
   const bump = (fn) => { const day = today(); days = days.map((d) => (d.day === day ? fn(d) : d)); };
   const message = () => `data: ${JSON.stringify({ online: watchers.size, ...settings })}\n\n`;
-  const broadcast = () => { const text = message(); for (const w of watchers) w.res.write(text); };
+  const send = (w, text) => { if (w.res.writableLength > SLOW_CLIENT_BYTES) w.res.destroy(); else w.res.write(text); };
+  const broadcast = () => { const text = message(); for (const w of watchers) send(w, text); };
   let pending = null;
   const soon = () => { if (!pending) pending = setTimeout(() => { pending = null; broadcast(); }, 1000); }; // at most once a second
 
-  const ping = setInterval(() => { for (const w of watchers) w.res.write(': ping\n\n'); }, PING_MS);
+  const ping = setInterval(() => {
+    for (const w of watchers) send(w, ': ping\n\n');
+    const old = now() - VISIT_GAP_MS;
+    for (const [key, at] of lastVisit) if (at < old) lastVisit.delete(key);
+  }, PING_MS);
+  if (file) store(file, days); // fail loudly at start-up if the stats cannot be written
   const save = file ? setInterval(() => store(file, days), 5 * 60 * 1000) : null;
   ping.unref?.();
   save?.unref?.();
 
   /** GET /api/live: hold the stream open while the page is. */
-  function watch(req, res, ip) {
+  function watch(req, res, address) {
+    const ip = ipKey(address);
     if (watchers.size >= MAX_WATCHERS || (perIp.get(ip) ?? 0) >= PER_IP) {
       res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' }).end('Đông quá, thử lại sau');
       return;
@@ -48,7 +60,9 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
     const w = { res };
     watchers.add(w);
     perIp.set(ip, (perIp.get(ip) ?? 0) + 1);
-    bump((d) => ({ ...d, visits: d.visits + 1, peakOnline: Math.max(d.peakOnline, watchers.size) }));
+    const fresh = now() - (lastVisit.get(ip) ?? -Infinity) > VISIT_GAP_MS;
+    lastVisit.set(ip, now());
+    bump((d) => ({ ...d, visits: d.visits + (fresh ? 1 : 0), peakOnline: Math.max(d.peakOnline, watchers.size) }));
     res.write('retry: 5000\n\n');
     res.write(message());
     soon();

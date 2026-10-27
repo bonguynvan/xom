@@ -13,6 +13,7 @@ services:
     command: node scripts/serve.js
     user: "10013:10013" # unprivileged; owns only data/
     read_only: true
+    tmpfs: [/tmp]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     mem_limit: 192m
@@ -30,6 +31,11 @@ services:
       - ../data:/app/data
     ports:
       - "127.0.0.1:${XOM_PORT:-3500}:3500" # loopback only
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3500/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     logging:
       driver: json-file
       options: { max-size: "5m", max-file: "2" }

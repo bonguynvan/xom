@@ -65,7 +65,7 @@ test('the operator API needs the token; the overview counts visits and the peak'
   assert.equal(body.kind, 'watch');
   assert.equal(body.live.players, 2);
   assert.equal(body.daily.length, 30);
-  assert.equal(body.daily.at(-1).visits, 2);
+  assert.equal(body.daily.at(-1).visits, 1, 'two tabs from one address within ten minutes are one visit');
   assert.equal(body.daily.at(-1).peakOnline, 2);
   a.close();
   b.close();
@@ -95,6 +95,14 @@ test('the admin announcement reaches open pages, cleaned and capped', async (t) 
   w.close();
   const big = await fetch(`${base}/api/ops/settings`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}` }, body: 'x'.repeat(5000) }).catch(() => ({ status: 400 }));
   assert.ok([400, 413].includes(big.status));
+});
+
+test('an IPv6 visitor is counted by their /64', async () => {
+  const { ipKey } = await import('../scripts/live.js');
+  assert.equal(ipKey('2001:db8:1:2:aaaa::1'), ipKey('2001:db8:1:2:bbbb::9'));
+  assert.notEqual(ipKey('2001:db8:1:2::1'), ipKey('2001:db8:1:3::1'));
+  assert.equal(ipKey('::ffff:203.0.113.9'), '203.0.113.9');
+  assert.equal(ipKey('203.0.113.9'), '203.0.113.9');
 });
 
 test('no dotfiles, no unknown file types', async (t) => {

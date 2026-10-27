@@ -13,7 +13,9 @@ header bảo mật và chặn `/api/ops/*` từ ngoài (`deploy/xom.caddy`).
    ```
    Trên máy mình: `git push <user>@<máy chủ>:/srv/xom main`.
 3. **Cấu hình**: `cp .env.example .env`, điền `OPS_TOKEN` giống hệt trong `.env` của peti.vn.
-   `mkdir -p data && chown 10013:10013 data` (container chạy với uid 10013, chỉ ghi vào `data/`).
+   `mkdir -p data && chown 10013:10013 data && chmod 700 data` **trước** lần chạy đầu (nếu để Docker tự tạo
+   thì thư mục thuộc root, thống kê không lưu được). `chmod 600 .env`. Tạo token: `openssl rand -hex 32`.
+   Chỉ trỏ DNS thẳng (không qua CDN): giới hạn kết nối mỗi IP dựa vào địa chỉ thật của người xem.
 4. **Chạy**:
    ```bash
    docker compose -f deploy/compose.yml up -d
