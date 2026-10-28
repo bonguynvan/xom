@@ -35,6 +35,9 @@ test('serves the page with a strict CSP and refuses traversal and writes', async
 
   assert.equal((await fetch(`${base}/..%2f..%2fpackage.json`)).status, 404);
   assert.equal((await fetch(`${base}/nope.js`)).status, 404);
+  const og = await fetch(`${base}/og.jpg`);
+  assert.equal(og.status, 200, 'the share image');
+  assert.equal(og.headers.get('content-type'), 'image/jpeg');
   assert.equal((await fetch(`${base}/js`)).status, 404);
   assert.equal((await fetch(`${base}/`, { method: 'POST' })).status, 405);
 });
