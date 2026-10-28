@@ -111,6 +111,7 @@ const footprint = (p) => ({ x0: p.x, x1: p.x + p.w, y0: p.front - (p.depth ?? DE
 function obstacles() {
   return [
     ...SHOPS.map(footprint),
+    ...CIVIC_PLACES.map(footprint),
     ...TREE_PLACES.map((t) => ({ x0: t.x - 8, x1: t.x + t.w + 8, y0: t.front - 30, y1: t.front })),
     ...QUAN.map((q) => ({ x0: q.x - 4, x1: q.x + q.w + 4, y0: q.y0 - 4, y1: q.y1 + 4 })),
     ...HEDGE.map((t) => ({ x0: t.x - 14, x1: t.x + 14, y0: t.y - 10, y1: t.y + 4 })),
@@ -169,10 +170,25 @@ function nameHomes(houses) {
   return houses.map((h, i) => (named.has(i) ? { ...h, id: named.get(i) } : h));
 }
 
+// ---------------- public buildings ----------------
+
+/** A school, clinic or office standing where a few houses would have been (the houses grow round it). */
+function civic(id, name, x, w, front, wish, open, roof) {
+  const room = Math.max(3, Math.round(w / 9)); // people standing about at the door
+  const spots = Array.from({ length: room }, (_, k) => stand(Math.round(x + ((k + 0.5) * w) / room), front + 5 + (k % 2) * 3));
+  return withDoor({ id, kind: id, name, building: true, civic: true, x, w, front, depth: DEPTH, floors: floorsFor(x, w, front, wish),
+    open, roof, spots, facadeSpots: [] });
+}
+const CIVIC_PLACES = [
+  civic('truong', 'Trường tiểu học', 1214, 164, 190, 2, [6.5, 17.5], 'tile'),
+  civic('tramYTe', 'Trạm y tế phường', 595, 102, 122, 2, [7, 17], 'flat'),
+  civic('uyBan', 'UBND phường', 938, 91, 274, 3, [7.5, 17], 'flat'),
+];
+
 /** @type {Array<object>} */
 const TREE_PLACES = [treePlace('cayPhuong', 'cayPhuong', 'Gốc phượng', 600, 574, [5, 21])];
 
-export const PLACES = [...SHOPS, ...OPEN, ...TREE_PLACES, ...QUAN, ...nameHomes(growHouses())];
+export const PLACES = [...SHOPS, ...OPEN, ...TREE_PLACES, ...QUAN, ...CIVIC_PLACES, ...nameHomes(growHouses())];
 
 export const findPlace = (id) => PLACES.find((p) => p.id === id) ?? null;
 export const isOpen = (place, hour) => !place.open || (hour >= place.open[0] && hour < place.open[1]);

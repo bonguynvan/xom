@@ -338,4 +338,5 @@ export const LOA_PHUONG = [
   'Đề nghị các cháu thiếu nhi không đá bóng ngoài đường!',
 ];
 
-export const findCast = (id) => CAST.find((c) => c.id === id) ?? null;
+const BY_ID = new Map(CAST.map((c) => [c.id, c]));
+export const findCast = (id) => BY_ID.get(id) ?? null;

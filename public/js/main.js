@@ -96,6 +96,13 @@ function advance(now) {
   return real;
 }
 
+// A slow device draws every other frame (30 fps) instead of falling behind; the xóm still runs on time.
+const SLOW_FRAME_MS = 14;
+const FAST_FRAME_MS = 8;
+const pace = { cost: 0, half: false, skip: false };
+const SPLASH_FRAMES = 3; // the first frames bake the caches; after these the xóm runs smoothly
+let drawn = 0;
+
 function frame(now) {
   const real = advance(now);
   if (now - state.lastInput > IDLE_BEFORE_DRIFT_MS && !reducedMotion.matches) {
@@ -103,8 +110,19 @@ function frame(now) {
     state.view = next.view;
     state.driftDir = next.dir;
   }
-  renderFrame(ctx, withAnnouncement(state.world, now), state.prev, state.acc / STEP_MS, { ...state.view, me: state.me });
-  showClock();
+  pace.skip = pace.half && !pace.skip;
+  if (!pace.skip) {
+    const start = performance.now();
+    renderFrame(ctx, withAnnouncement(state.world, now), state.prev, state.acc / STEP_MS, { ...state.view, me: state.me });
+    pace.cost = pace.cost * 0.95 + (performance.now() - start) * 0.05;
+    pace.half = pace.cost > SLOW_FRAME_MS || (pace.half && pace.cost > FAST_FRAME_MS);
+    if (drawn < SPLASH_FRAMES) {
+      drawn += 1;
+      pace.cost = 0; // baking the caches is not what a frame normally costs
+      if (drawn === SPLASH_FRAMES) $('splash').classList.add('gone');
+    }
+    showClock();
+  }
   requestAnimationFrame(frame);
 }
 

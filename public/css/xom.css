@@ -163,6 +163,23 @@ body {
 }
 .hint.gone { opacity: 0; }
 
+/* Covers the first second while the ground, houses and people are painted into their caches. */
+.splash {
+  position: absolute; inset: 0; z-index: 3; display: grid; place-content: center; gap: 4px; text-align: center;
+  background: var(--cream); transition: opacity 500ms var(--ease), visibility 0s linear 500ms;
+}
+.splash.gone { opacity: 0; visibility: hidden; }
+.splash-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: clamp(1.6rem, 1.2rem + 2vw, 2.4rem); }
+.splash-sub { margin: 0; font-weight: 700; opacity: 0.75; padding: 0 16px; }
+.splash-dots { display: flex; justify-content: center; gap: 8px; margin-top: 10px; }
+.splash-dots i {
+  width: 12px; height: 12px; border: 2px solid var(--ink); border-radius: 50%; background: var(--sun);
+  animation: splash-hop 900ms var(--ease) infinite;
+}
+.splash-dots i:nth-child(2) { animation-delay: 150ms; background: var(--tomato); }
+.splash-dots i:nth-child(3) { animation-delay: 300ms; }
+@keyframes splash-hop { 0%, 60%, 100% { translate: 0 0; } 30% { translate: 0 -8px; } }
+
 @media (max-width: 560px) {
   .top { padding: 8px 12px; }
   .brand { font-size: 1.25rem; }
@@ -179,5 +196,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .hint { transition: none; }
+  .splash { transition: none; }
+  .splash-dots i { animation: none; }
   .loa-text { animation: none; padding-left: 8px; white-space: normal; }
 }

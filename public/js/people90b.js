@@ -10,6 +10,14 @@ function cuBi(ctx, c, p, m, face) {
   thinLine(ctx, '#2b2d42', 2, () => { ctx.moveTo(a.headX - 12, a.headY - 12); ctx.lineTo(a.headX - 4, a.headY - 17); ctx.lineTo(a.headX + 4, a.headY - 13); });
 }
 
+function hocSinh(ctx, c, p, m, face) {
+  // A pupil: white shirt, red scarf, navy shorts, a satchel in the colour of the day.
+  shape(ctx, c, () => roundedPath(ctx, -17, -50, 10, 16, 3), 1.8); // the satchel on the back
+  const a = person(ctx, '#f7f5ee', p, m, face, { legLen: 18, torsoW: 18, torsoH: 20, headR: 15, pants: '#2d3a64', legW: 6 });
+  shape(ctx, '#2b2d42', () => { ctx.ellipse(a.headX - 1, a.headY - 4, a.r + 1, a.r * 0.75, 0, Math.PI, 0); ctx.closePath(); }, 1.5); // a bowl cut
+  shape(ctx, '#da251d', () => { ctx.moveTo(a.headX - 7, a.top + 1); ctx.lineTo(a.headX + 7, a.top + 1); ctx.lineTo(a.headX + 1, a.top + 12); ctx.closePath(); }, 1.5);
+}
+
 function ganhHang(ctx, c, p, m, face) {
   // Shoulder pole with two baskets bouncing in step; conical hat.
   const bounce = m ? Math.sin(p * 2) * 2.5 : 0;
@@ -87,4 +95,4 @@ function banKem(ctx, c, p, m, face) {
 }
 
 /** Painters for the 1990s cast, part 2. */
-export const PEOPLE90B = { cuBi, ganhHang, xeOm, coGiao, duaThu, baGac, banKem };
+export const PEOPLE90B = { cuBi, hocSinh, ganhHang, xeOm, coGiao, duaThu, baGac, banKem };

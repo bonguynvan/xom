@@ -2,6 +2,7 @@
 // and shrunk by K onto its row; the roof is drawn above it as seen from the sky, scroll-painting style.
 // Details (peeling paint, which windows glow at night) come from noise(x), so they never flicker.
 import { FONT, INK, circle, ellipse, roundedPath, shade, shape, stroke, thinLine } from './duavit/paint.js';
+import { CIVIC } from './civic.js';
 import { FLOOR, HOUSE_BASE, groundFloor, tubeHouse } from './facade.js';
 import { K } from './map.js';
 import { noise } from './rng.js';
@@ -122,7 +123,7 @@ function roof(ctx, p) {
   const h = facadeHeight(p);
   const d = p.depth * ROOF_DEPTH;
   const top = p.front - h - d;
-  const kind = noise(oldX(p), 21);
+  const kind = p.roof === 'tile' ? 0 : p.roof === 'flat' ? 0.9 : noise(oldX(p), 21);
   ctx.lineJoin = 'round';
   if (kind < 0.3) { // old clay tiles
     shape(ctx, '#b85c38', () => ctx.rect(p.x - 1, top, p.w + 2, d + 1), 1);
@@ -151,7 +152,7 @@ function roof(ctx, p) {
     ctx.lineTo(ax, top - 9);
     for (let k = 0; k < 3; k += 1) { ctx.moveTo(ax - 3 + k, top - 8 + k * 2); ctx.lineTo(ax + 3 - k, top - 8 + k * 2); }
   });
-  if (noise(oldX(p), 25) < 0.4) { // washing on the roof
+  if (!p.civic && noise(oldX(p), 25) < 0.4) { // washing on the roof
     thinLine(ctx, INK, 0.5, () => { ctx.moveTo(p.x + 3, top + 5); ctx.lineTo(p.x + p.w - 3, top + 7); });
     ['#ef476f', '#2d9cdb', '#ffd23f'].forEach((col, k) => { ctx.fillStyle = col; ctx.fillRect(p.x + 6 + k * 6, top + 5.5, 3, 3); });
   }
@@ -161,6 +162,7 @@ function roof(ctx, p) {
 export function drawBuilding(ctx, p) {
   if (!OUTDOOR.has(p.kind)) roof(ctx, p);
   inFacade(ctx, p, (old) => {
+    if (CIVIC[old.kind]) { CIVIC[old.kind](ctx, old, floorsOf(p)); return; }
     if (!OUTDOOR.has(old.kind)) tubeHouse(ctx, old, floorsOf(p), old.color ?? ['#f2c94c', '#f4a6a0', '#9ccf9a', '#8ec5e8', '#f6d7a7'][Math.floor(noise(old.x, 8) * 5)]);
     if (old.kind === 'house') groundFloor(ctx, old.x, old.w);
     else SHOP[old.kind]?.(ctx, old);

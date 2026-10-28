@@ -32,17 +32,25 @@ No dependencies, no build step.
 - Drawing: `painters.js` registry (vendored duavit painters + `people90*.js`), `face.js` (cartoon faces,
   no text, so a mirrored character still reads), `body.js`. `buildings.js` draws the old side-on facades
   shrunk by K plus a roof seen from above; `scenery.js` the ground and everything else; `render.js`
-  depth-sorts all standing things by their ground y, caches each building as a bitmap (zoom ≤ 2), tints
+  depth-sorts all standing things by their ground y, caches each building as a bitmap (zoom ≤ 4.5), tints
   the scene by the hour, then draws speech bubbles on top. Sound will be background music only (the
   user's call: with this many characters voices would be noise).
+- Public buildings: `civic.js` draws the primary school, trạm y tế and UBND phường; `places.js` reserves their ground
+  (`CIVIC_PLACES`) before the houses grow, so they stand where a few houses would have been.
 - Vietnamese look: `facade.js` (lime-wash walls with moss, green louvred shutters, chuồng cọp cages, wrought-iron
   balconies, washing poles, bird cages, the flag, blue house numbers, hand-painted signs, folding iron gates),
   `street-life.js` (parked Cubs, quán cóc with parasols and plastic stools, the ward banner, the xóm gate,
   bamboo hedge, egrets). Pavements are red brick; roofs are clay tile, corrugated iron or concrete with a brick tank.
-- Crowd: `crowd.js` generates ~500 everyday neighbours and kids (simulated); `extras.js` is the background
-  crowd (~400 people on the pavement stools, in the market, kids on the bare ground) that is a pure function
-  of the clock, not simulated. `meet()` uses a grid so a thousand walkers stay cheap. `sprites.js` caches the
-  ground, every building and every resident pose as bitmaps (zoom ≤ 2); speech bubbles are capped per frame.
+- Crowd: `crowd.js` generates ~790 everyday neighbours and kids (simulated; half the kids are pupils, painter
+  `hocSinh`); `extras.js` is the background crowd (~700: pavement stools, market, kids on the bare ground, pond,
+  pupils at the school gate at the bell, clinic patients, dawn exercises and the afternoon crowd in the đình yard)
+  that is a pure function of the clock, not simulated. `meet()` uses a grid so a thousand walkers stay cheap. `sprites.js` caches the
+  ground, every building and every resident pose as bitmaps baked at 1×, 2× or 3× (high-density screens start near
+  2.5×; the ground is in 350-unit tiles so no bitmap is too big for a GPU canvas; drawn directly past 4.5×), keyed by how a resident looks (painter,
+  colour, face), not by who it is, so hundreds of crowd entries share ~230 looks; speech bubbles are capped per frame.
+- Cost (measured): a simulation step is ~0.4 ms for ~1,280 agents; drawing is the cost (roughly +0.8 ms per 100
+  people in view). `main.js` draws every other frame when a frame costs > 14 ms (back above 60 fps under 8 ms),
+  and a splash ("Đang dọn xóm…") covers the first 3 frames while the caches are baked.
 - Talk: `lines.js` pools (any time, by part of day, by place, by weather, catchphrases, more greetings and
   quarrels, traffic quarrels, honks). `pickLine` draws from weighted pools and each agent remembers its last 6
   lines (`recent`) so it does not repeat; greetings and quarrels avoid recent lines too (`freshPair`).
