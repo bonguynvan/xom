@@ -20,9 +20,9 @@ export function lightAt(hour) {
   return { dark, warm: Math.max(0, warm) };
 }
 
-const visibleState = (a) => a.state !== 'inside' && a.state !== 'away';
+const visibleState = (a) => a.state !== 'inside' && a.state !== 'away' && a.state !== 'gone';
 const ALTITUDE = 46; // how high flyers are drawn above their shadow
-const SIDE_STEPPERS = new Set(['keeper', 'walker', 'kid', 'vendor', 'stray']);
+const SIDE_STEPPERS = new Set(['keeper', 'walker', 'kid', 'vendor', 'stray', 'guest']);
 
 /** Where to draw a resident: blended with the last step, and a little to one side of the way they face. */
 function placeOf(a, before, alpha) {
@@ -122,8 +122,31 @@ function bubble(ctx, text, sx, at, view, placed, angry = false) {
   return true;
 }
 
+/** Little name tags over visitors: always over your own, over everyone's when there are few or you zoom in. */
+function nameTags(ctx, residents, view, placed) {
+  const px = view.dpr ?? 1;
+  const guests = residents.filter((r) => r.a.kind === 'guest');
+  const everyone = guests.length <= 40 || view.scale / px >= 1.6;
+  ctx.font = `800 ${10 * px}px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const r of guests) {
+    const mine = r.a.guestId === view.me;
+    if (!mine && !everyone) continue;
+    const text = mine ? `★ ${r.a.name}` : r.a.name;
+    const w = ctx.measureText(text).width + 10 * px;
+    const sx = (r.x - view.camX) * view.scale;
+    const sy = (r.y - r.a.size * 1.05 - view.camY) * view.scale;
+    shape(ctx, mine ? '#ffd23f' : 'rgba(29, 26, 47, 0.85)', () => roundedPath(ctx, sx - w / 2, sy - 14 * px, w, 13 * px, 6 * px), mine ? 1.5 * px : 0.01);
+    ctx.fillStyle = mine ? INK : '#fffdf8';
+    ctx.fillText(text, sx, sy - 7.5 * px);
+    placed.push({ x: sx - w / 2, y: sy - 14 * px, w });
+  }
+}
+
 function speech(ctx, world, view, residents) {
   const placed = [];
+  nameTags(ctx, residents, view, placed);
   const screen = (x, y) => ({ sx: (x - view.camX) * view.scale, sy: (y - view.camY) * view.scale });
   const budget = Math.max(6, Math.round((view.w * view.h) / (110000 * (view.dpr ?? 1) ** 2))); // a crowd, not a wall of text
   const talking = residents.filter((r) => r.a.bubble && world.t >= r.a.bubble.from)

@@ -3,10 +3,12 @@
 import { clampView, drift, fit, panBy, wheelPixels, zoomAt } from './camera.js';
 import { hourOf } from './map.js';
 import { renderFrame } from './render.js';
+import { GUEST_LOOKS, cleanName, randomName } from './guests.js';
 import { createMusic } from './music.js';
-import { STEP_MS, createWorld, stepWorld } from './world.js';
+import { STEP_MS, createWorld, stepWorld, syncGuests } from './world.js';
 
-const MAX_STEPS_PER_FRAME = 40; // only guards a tab waking from sleep
+const MAX_STEPS_PER_FRAME = 40; // only guards a slow frame
+const MAX_GAP_MS = 1000; // a longer pause means the tab was hidden or asleep
 const IDLE_BEFORE_DRIFT_MS = 6000;
 const KEY_PAN = 60; // css px per arrow press
 
@@ -33,6 +35,9 @@ const state = {
   driftDir: 1,
   lastInput: -Infinity,
   announcement: null,
+  sid: null, // this page's private id on the live stream (needed to join)
+  me: null, // this page's visitor id once it has come home to the xóm
+  guests: [],
 };
 
 function resize() {
@@ -51,9 +56,34 @@ function resize() {
   state.view = clampView({ w: canvas.width, h: canvas.height, dpr, makeCanvas, scale, camX: cx - canvas.width / scale / 2, camY: cy - canvas.height / scale / 2 });
 }
 
+/** The world's minute moved to `target` (a minute of the day), forwards or back by the shortest way round. */
+function clockAt(world, target) {
+  const day = 24 * 60;
+  const shift = ((((target - world.minute) % day) + day * 1.5) % day) - day / 2;
+  return { ...world, minute: world.minute + shift };
+}
+
+const REALTIME = RATE === 1 / 60;
+const RESYNC_MINUTES = 1; // in real time, a clock that drifts further than this is put right
+
+/**
+ * Step the world for the real time that passed. A hidden tab gets no frames: when it comes back the gap
+ * is not simulated step by step (that could be hours) but the clock jumps, so the xóm keeps the right time.
+ */
 function advance(now) {
-  const real = Math.min(now - state.last, 1000);
+  const gap = now - state.last;
   state.last = now;
+  if (gap > MAX_GAP_MS) {
+    state.world = REALTIME ? clockAt(state.world, vnMinute()) : { ...state.world, minute: state.world.minute + (gap / 1000) * RATE };
+    state.prev = state.world;
+    state.acc = 0;
+    return 0;
+  }
+  if (REALTIME && Math.abs(state.world.minute % (24 * 60) - vnMinute()) > RESYNC_MINUTES
+    && Math.abs(state.world.minute % (24 * 60) - vnMinute()) < 24 * 60 - RESYNC_MINUTES) {
+    state.world = clockAt(state.world, vnMinute());
+  }
+  const real = gap;
   state.acc += real;
   let steps = 0;
   while (state.acc >= STEP_MS && steps < MAX_STEPS_PER_FRAME) {
@@ -73,7 +103,7 @@ function frame(now) {
     state.view = next.view;
     state.driftDir = next.dir;
   }
-  renderFrame(ctx, withAnnouncement(state.world, now), state.prev, state.acc / STEP_MS, state.view);
+  renderFrame(ctx, withAnnouncement(state.world, now), state.prev, state.acc / STEP_MS, { ...state.view, me: state.me });
   showClock();
   requestAnimationFrame(frame);
 }
@@ -160,9 +190,23 @@ window.addEventListener('keydown', (e) => {
 function listen() {
   if (!('EventSource' in window)) return;
   const source = new EventSource('/api/live');
+  source.addEventListener('hello', (event) => {
+    try { state.sid = JSON.parse(event.data).sid; } catch { return; }
+    state.me = null; // a new stream (first load or after a drop): the server has forgotten us, join again
+    showJoin();
+  });
+  source.addEventListener('kicked', () => {
+    state.me = null;
+    showJoin();
+    $('hint').textContent = 'Bạn đã được mời ra khỏi xóm. Lát nữa quay lại nhé.';
+    $('hint').classList.remove('gone');
+  });
   source.addEventListener('message', (event) => {
     let data;
     try { data = JSON.parse(event.data); } catch { return; }
+    state.guests = Array.isArray(data.guests) ? data.guests : [];
+    state.world = syncGuests(state.world, state.guests);
+    if (state.me && !state.guests.some((g) => g.id === state.me)) { state.me = null; showJoin(); }
     const online = Number(data.online) || 0;
     $('online').hidden = online < 1;
     $('online').textContent = `👀 ${online.toLocaleString('vi-VN')} người đang xem`;
@@ -177,9 +221,85 @@ function listen() {
       $('loa-text').style.animationDuration = `${Math.max(10, distance / TICKER_SPEED)}s`; // CSSOM: allowed by the CSP
     }
   });
-  source.addEventListener('error', () => { $('online').hidden = true; }); // EventSource retries by itself
+  source.addEventListener('error', () => { $('online').hidden = true; $('join').hidden = true; }); // EventSource retries by itself
 }
 listen();
+
+// ---------------- coming home to the xóm ----------------
+
+const PREFS_KEY = 'xom.guest';
+const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {}; } catch { return {}; } };
+const savePrefs = (prefs) => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* private mode: fine */ } };
+
+function showJoin() {
+  $('join').hidden = !state.sid;
+  $('join').textContent = state.me ? '🚪 Rời xóm' : '🏠 Về xóm';
+  $('join').setAttribute('aria-pressed', String(Boolean(state.me)));
+  $('find-me').hidden = !state.me;
+}
+
+function buildLooks(chosen) {
+  $('join-looks').replaceChildren(...GUEST_LOOKS.map((look) => {
+    const input = Object.assign(document.createElement('input'), { type: 'radio', name: 'look', value: look.id, checked: look.id === chosen });
+    const label = document.createElement('label');
+    label.append(input, Object.assign(document.createElement('span'), { textContent: look.label }));
+    return label;
+  }));
+}
+
+function openJoin() {
+  const prefs = loadPrefs();
+  $('join-name').value = prefs.name ?? randomName();
+  buildLooks(prefs.look ?? GUEST_LOOKS[Math.floor(Math.random() * GUEST_LOOKS.length)].id);
+  $('join-error').hidden = true;
+  $('join-dialog').showModal();
+  $('join-name').select();
+}
+
+async function post(path, body) {
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return { ok: res.ok, body: await res.json().catch(() => ({})) };
+}
+
+/** Walk the camera over to this page's character (and zoom in enough to see it). */
+function findMe() {
+  const me = state.world.agents.find((a) => a.guestId === state.me && a.state !== 'gone');
+  if (!me) return;
+  touched();
+  const scale = Math.min(state.limits.max, Math.max(state.view.scale, state.limits.start * 2.2));
+  state.view = clampView({ ...state.view, scale, camX: me.x - state.view.w / scale / 2, camY: me.y - state.view.h / scale / 2 });
+}
+
+$('join').addEventListener('click', async () => {
+  if (!state.me) { openJoin(); return; }
+  await post('/api/leave', { sid: state.sid }).catch(() => {});
+  state.me = null;
+  showJoin();
+});
+$('find-me').addEventListener('click', findMe);
+$('join-cancel').addEventListener('click', () => $('join-dialog').close());
+$('join-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const name = cleanName($('join-name').value);
+  const look = new FormData($('join-form')).get('look');
+  const fail = (message) => { $('join-error').textContent = message; $('join-error').hidden = false; };
+  if (!name) return fail('Tên cần 2-24 chữ, không dùng từ tục hay từ cờ bạc nhé.');
+  if (!look) return fail('Chọn một kiểu người nhé.');
+  $('join-go').disabled = true;
+  try {
+    const { ok, body } = await post('/api/join', { sid: state.sid, name, look });
+    if (!ok) return fail(body.error ?? 'Chưa vào được, thử lại nhé.');
+    state.me = body.id;
+    savePrefs({ name: body.name, look: body.look });
+    $('join-dialog').close();
+    showJoin();
+    setTimeout(findMe, 1500); // once the server has told everyone (and us) that we are here
+  } catch {
+    fail('Mất kết nối, thử lại nhé.');
+  } finally {
+    $('join-go').disabled = false;
+  }
+});
 
 // ---------------- music: lofi made in the browser, following the xóm's hour ----------------
 

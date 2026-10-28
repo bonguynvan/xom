@@ -6,6 +6,7 @@ import { LAMPS, PLACES, POLES, TREES, findPlace } from './places.js';
 import { TRAIN_LENGTH } from './world.js';
 import { noise } from './rng.js';
 import { DECOR, drawGroundClutter } from './decor.js';
+import { GREENERY, drawGreenGround } from './greenery.js';
 import { BIKES, EGRETS, HEDGE, STOOL_CLUSTERS, banner, drawBamboo, drawBike, drawEgret, drawQuanCoc, drawStoolCluster, gateParts } from './street-life.js';
 
 const LINE = 1; // outline width at map scale
@@ -130,6 +131,7 @@ export function drawGround(ctx) {
       ctx.fill();
     }
   }
+  drawGreenGround(ctx);
   streets(ctx);
   drawGroundClutter(ctx);
 }
@@ -273,7 +275,7 @@ export function standing(train) {
   for (const c of STOOL_CLUSTERS) items.push({ y: c.y - 4, draw: (ctx) => drawStoolCluster(ctx, c) });
   for (const t of HEDGE) items.push({ y: t.y, draw: (ctx) => drawBamboo(ctx, t) });
   for (const e of EGRETS) items.push({ y: e.y, draw: (ctx, open) => drawEgret(ctx, e, open.t) });
-  items.push(...gateParts(), banner(), ...DECOR);
+  items.push(...gateParts(), banner(), ...DECOR, ...GREENERY);
   for (const p of POLES) items.push({ y: p.y, draw: (ctx) => pole(ctx, p) });
   for (const l of LAMPS) items.push({ y: l.y, draw: (ctx, open, glow) => lamp(ctx, l, glow) });
   return items;

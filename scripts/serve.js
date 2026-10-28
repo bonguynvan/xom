@@ -74,6 +74,11 @@ export function createHandler({ live = createLive(), trustProxy = false } = {}) 
     const path = (req.url ?? '/').split('?')[0];
     if (path === '/healthz') return send(res, 200, { ok: true });
     if (path === '/api/live' && req.method === 'GET') return live.watch(req, res, clientIp(req, trustProxy));
+    if ((path === '/api/join' || path === '/api/leave') && req.method === 'POST') {
+      const input = await readJson(req);
+      const { status, body } = path === '/api/join' ? live.join(input) : live.leave(input);
+      return send(res, status, body);
+    }
     if (path.startsWith('/api/ops/')) {
       // Token first, body second: strangers' payloads are never read.
       if (!live.opsOn) return send(res, 404, { error: 'Game chưa bật OPS_TOKEN' });
@@ -83,6 +88,8 @@ export function createHandler({ live = createLive(), trustProxy = false } = {}) 
         const input = await readJson(req);
         return input && typeof input === 'object' ? send(res, 200, { ok: true, settings: live.updateSettings(input) }) : send(res, 400, { error: 'Dữ liệu không hợp lệ' });
       }
+      const kick = path.match(/^\/api\/ops\/guests\/(g\d{1,9})\/kick$/);
+      if (kick && req.method === 'POST') return live.kick(kick[1]) ? send(res, 200, { ok: true }) : send(res, 404, { error: 'Không có khách này' });
       return send(res, 404, { error: 'Không có' });
     }
     if (path.startsWith('/api/')) return send(res, 404, { error: 'Không có' });

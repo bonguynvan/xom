@@ -14,17 +14,30 @@ async function start(t, opts = {}) {
   return { live, base: `http://127.0.0.1:${server.address().port}` };
 }
 
-/** Open /api/live and return the first event's data plus a way to hang up. */
+/** Open /api/live: the page's private id (from the hello event), the first state, and a way to hang up. */
 async function watch(base, headers = {}) {
   const ctrl = new AbortController();
   const res = await fetch(`${base}/api/live`, { signal: ctrl.signal, headers });
   if (res.status !== 200) return { status: res.status, close: () => ctrl.abort() };
   const reader = res.body.getReader();
   let text = '';
-  while (!text.includes('data:')) text += new TextDecoder().decode((await reader.read()).value);
-  const data = JSON.parse(text.slice(text.indexOf('data:') + 5).split('\n')[0]);
-  return { status: 200, data, close: () => ctrl.abort() };
+  while (!text.includes('"online"')) text += new TextDecoder().decode((await reader.read()).value);
+  const sid = JSON.parse(text.split('event: hello\ndata: ')[1].split('\n')[0]).sid;
+  const data = JSON.parse(text.slice(text.indexOf('data: {"online"') + 6).split('\n')[0]);
+  return { status: 200, sid, data, reader, close: () => ctrl.abort() };
 }
+
+/** The next state pushed on an open stream. */
+async function nextState(w) {
+  let text = '';
+  for (;;) {
+    text += new TextDecoder().decode((await w.reader.read()).value);
+    const at = text.lastIndexOf('data: {"online"');
+    if (at >= 0 && text.indexOf('\n\n', at) > 0) return JSON.parse(text.slice(at + 6).split('\n')[0]);
+  }
+}
+
+const post = (base, path, body, headers = {}) => fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
 const settle = () => new Promise((done) => setTimeout(done, 80));
 
@@ -110,4 +123,43 @@ test('no dotfiles, no unknown file types', async (t) => {
   assert.equal((await fetch(`${base}/js/duavit/VENDORED.md`)).status, 404);
   assert.equal((await fetch(`${base}/.env`)).status, 404);
   assert.equal((await fetch(`${base}/healthz`)).status, 200);
+});
+
+test('a page can come home to the xóm with a name and a look, and everyone sees it', async (t) => {
+  const { live, base } = await start(t);
+  const me = await watch(base);
+  const other = await watch(base);
+  assert.equal((await post(base, '/api/join', { sid: 'nope', name: 'Cu Tèo', look: 'treCon' })).status, 400);
+  assert.equal((await post(base, '/api/join', { sid: me.sid, name: 'đm thằng', look: 'treCon' })).status, 400, 'rude names are refused');
+  assert.equal((await post(base, '/api/join', { sid: me.sid, name: 'Cu Tèo', look: 'xeTang' })).status, 400, 'unknown look');
+  const res = await post(base, '/api/join', { sid: me.sid, name: '  Cu   Tèo  ', look: 'treCon' });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.name, 'Cu Tèo');
+  const seen = await nextState(other);
+  assert.deepEqual(seen.guests, [{ id: body.id, name: 'Cu Tèo', look: 'treCon' }]);
+  assert.equal(live.guestCount(), 1);
+  assert.equal((await post(base, '/api/join', { sid: me.sid, name: 'Cu Tí', look: 'treCon' })).status, 429, 'renaming is slowed down');
+  me.close();
+  await settle();
+  assert.equal(live.guestCount(), 0, 'closing the page sends the character home');
+  other.close();
+});
+
+test('leaving, the per-address cap, and the admin sending a guest away', async (t) => {
+  const { live, base } = await start(t, { trustProxy: true });
+  const ip = { 'X-Forwarded-For': '198.51.100.7' };
+  const pages = [];
+  for (let k = 0; k < 4; k += 1) pages.push(await watch(base, ip));
+  for (let k = 0; k < 3; k += 1) assert.equal((await post(base, '/api/join', { sid: pages[k].sid, name: `Khách ${k}`, look: 'aoDai' })).status, 200);
+  assert.equal((await post(base, '/api/join', { sid: pages[3].sid, name: 'Khách 3', look: 'aoDai' })).status, 429, 'three per address');
+  assert.equal((await post(base, '/api/leave', { sid: pages[0].sid })).status, 200);
+  assert.equal(live.guestCount(), 2);
+  const overview = await (await fetch(`${base}/api/ops/overview`, { headers: { Authorization: `Bearer ${TOKEN}` } })).json();
+  const target = overview.guests[0].id;
+  assert.equal((await fetch(`${base}/api/ops/guests/${target}/kick`, { method: 'POST' })).status, 401);
+  assert.equal((await fetch(`${base}/api/ops/guests/${target}/kick`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}` } })).status, 200);
+  assert.equal(live.guestCount(), 1);
+  assert.equal((await post(base, '/api/join', { sid: pages[3].sid, name: 'Quay lại', look: 'aoDai' })).status, 403, 'that address waits a while');
+  pages.forEach((p) => p.close());
 });

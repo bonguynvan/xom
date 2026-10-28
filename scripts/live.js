@@ -2,7 +2,10 @@
 // is an open /api/live connection (Server-Sent Events) and nothing more. The server counts them, pushes the
 // count (with the admin's announcement and maintenance switch) to every page, and keeps a small daily tally
 // (visits, peak watchers) for the peti.vn admin dashboard, which reads it over /api/ops/* with OPS_TOKEN.
-import { createHash, timingSafeEqual } from 'node:crypto';
+// A watcher may also "come home to the xóm" (POST /api/join with the private id its stream was given): it
+// gets a character with a name of its choosing that every page draws, until the page is closed.
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { cleanName, lookById } from '../public/js/guests.js';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 
 export const OPS_TOKEN_MIN = 32;
@@ -13,6 +16,10 @@ const VISIT_GAP_MS = 10 * 60 * 1000; // reopening the page within ten minutes is
 const SLOW_CLIENT_BYTES = 16 * 1024; // a stream nobody reads any more is dropped
 const PING_MS = 25000; // keeps proxies from closing an idle stream
 const ANNOUNCE_MAX = 200;
+const MAX_GUESTS = 300; // visitors with a character in the xóm (every page draws them all)
+const GUESTS_PER_IP = 3;
+const REJOIN_MS = 5000; // changing name or look, at most this often
+const KICK_MS = 30 * 60 * 1000; // a guest the admin sends away cannot come back from that page or address for this long
 
 const vnDay = (ms) => new Date(ms + 7 * 3600 * 1000).toISOString().slice(0, 10); // days turn over at midnight in Vietnam
 const digest = (value) => createHash('sha256').update(String(value)).digest();
@@ -24,6 +31,10 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
   const watchers = new Set();
   const perIp = new Map();
   const lastVisit = new Map(); // memory only, pruned; never written anywhere
+  const bySid = new Map(); // a stream's private id -> its watcher
+  const kicked = new Map(); // ip key -> until (memory only)
+  let nextGuest = 1;
+  const guests = () => [...watchers].filter((w) => w.guest).map((w) => w.guest);
   let settings = { maintenance: false, announcement: null };
   let days = load(file);
 
@@ -33,7 +44,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
     return day;
   };
   const bump = (fn) => { const day = today(); days = days.map((d) => (d.day === day ? fn(d) : d)); };
-  const message = () => `data: ${JSON.stringify({ online: watchers.size, ...settings })}\n\n`;
+  const message = () => `data: ${JSON.stringify({ online: watchers.size, ...settings, guests: guests().map(({ id, name, look }) => ({ id, name, look })) })}\n\n`;
   const send = (w, text) => { if (w.res.writableLength > SLOW_CLIENT_BYTES) w.res.destroy(); else w.res.write(text); };
   const broadcast = () => { const text = message(); for (const w of watchers) send(w, text); };
   let pending = null;
@@ -43,6 +54,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
     for (const w of watchers) send(w, ': ping\n\n');
     const old = now() - VISIT_GAP_MS;
     for (const [key, at] of lastVisit) if (at < old) lastVisit.delete(key);
+    for (const [key, until] of kicked) if (until < now()) kicked.delete(key);
   }, PING_MS);
   if (file) store(file, days); // fail loudly at start-up if the stats cannot be written
   const save = file ? setInterval(() => store(file, days), 5 * 60 * 1000) : null;
@@ -57,21 +69,62 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
       return;
     }
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-    const w = { res };
+    const w = { res, ip, sid: randomBytes(16).toString('hex'), guest: null, joinedAt: 0 };
     watchers.add(w);
+    bySid.set(w.sid, w);
     perIp.set(ip, (perIp.get(ip) ?? 0) + 1);
     const fresh = now() - (lastVisit.get(ip) ?? -Infinity) > VISIT_GAP_MS;
     lastVisit.set(ip, now());
     bump((d) => ({ ...d, visits: d.visits + (fresh ? 1 : 0), peakOnline: Math.max(d.peakOnline, watchers.size) }));
     res.write('retry: 5000\n\n');
+    res.write(`event: hello\ndata: ${JSON.stringify({ sid: w.sid })}\n\n`); // only this page learns its id
     res.write(message());
     soon();
     req.on('close', () => {
       watchers.delete(w);
+      bySid.delete(w.sid);
       const left = (perIp.get(ip) ?? 1) - 1;
       if (left > 0) perIp.set(ip, left); else perIp.delete(ip);
       soon();
     });
+  }
+
+  /** POST /api/join { sid, name, look }: this page's character comes to the xóm (or changes name or look). */
+  function join(input) {
+    const w = typeof input?.sid === 'string' ? bySid.get(input.sid) : null;
+    if (!w) return { status: 400, body: { error: 'Trang này chưa kết nối, tải lại trang nhé' } };
+    if ((kicked.get(w.ip) ?? 0) > now()) return { status: 403, body: { error: 'Bạn vừa bị mời ra khỏi xóm, quay lại sau nhé' } };
+    const name = cleanName(input.name);
+    if (!name) return { status: 400, body: { error: 'Tên cần 2-24 chữ, không dùng từ tục hay từ cờ bạc' } };
+    const look = lookById(input.look);
+    if (!look) return { status: 400, body: { error: 'Chọn một kiểu người nhé' } };
+    if (w.guest && now() - w.joinedAt < REJOIN_MS) return { status: 429, body: { error: 'Từ từ đã, đổi chậm thôi' } };
+    if (!w.guest) {
+      if (guests().length >= MAX_GUESTS) return { status: 429, body: { error: 'Xóm đông quá rồi, lát quay lại nhé' } };
+      if (guests().filter((g) => g.ip === w.ip).length >= GUESTS_PER_IP) return { status: 429, body: { error: 'Nhà bạn đã có đủ người trong xóm' } };
+    }
+    w.guest = { id: w.guest?.id ?? `g${nextGuest++}`, name, look: look.id, ip: w.ip, since: w.guest?.since ?? now() };
+    w.joinedAt = now();
+    soon();
+    return { status: 200, body: { id: w.guest.id, name, look: look.id } };
+  }
+
+  /** POST /api/leave { sid }: this page's character goes home. */
+  function leave(input) {
+    const w = typeof input?.sid === 'string' ? bySid.get(input.sid) : null;
+    if (w?.guest) { w.guest = null; soon(); }
+    return { status: 200, body: { ok: true } };
+  }
+
+  /** The admin sends a guest home and keeps that address out for a while. */
+  function kick(id) {
+    const w = [...watchers].find((x) => x.guest?.id === id);
+    if (!w) return false;
+    kicked.set(w.ip, now() + KICK_MS);
+    w.guest = null;
+    send(w, `event: kicked\ndata: {}\n\n`);
+    broadcast();
+    return true;
   }
 
   const opsOn = typeof token === 'string' && token.length >= OPS_TOKEN_MIN;
@@ -89,6 +142,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
       memoryMb: Math.round(process.memoryUsage().rss / 1048576),
       live: { rooms: 0, players: watchers.size, connections: watchers.size },
       rooms: [],
+      guests: guests().map(({ id, name, look, since }) => ({ id, name, look, minutes: Math.round((now() - since) / 60000) })),
       daily: padDays(days, now()),
       settings,
     };
@@ -115,7 +169,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
     for (const w of watchers) w.res.end();
   };
 
-  return { watch, overview, updateSettings, authorized, opsOn, close, online: () => watchers.size };
+  return { watch, join, leave, kick, overview, updateSettings, authorized, opsOn, close, online: () => watchers.size, guestCount: () => guests().length };
 }
 
 /** The last 30 days, one entry each, zeros for the days nobody came. */

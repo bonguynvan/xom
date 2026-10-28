@@ -15,6 +15,8 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; } /* the loudspeaker, buttons and dialogs hide by the attribute */
+
 html, body { margin: 0; height: 100%; }
 
 body {
@@ -56,6 +58,52 @@ body {
   background: var(--paper); color: var(--ink); font-weight: 800; font-size: 0.9rem; text-decoration: none; white-space: nowrap;
   box-shadow: 2px 2px 0 var(--ink); transition: translate 120ms var(--ease), box-shadow 120ms var(--ease);
 }
+.online[hidden] + .join, .online[hidden] + .join[hidden] + .find, .online[hidden] + .join[hidden] + .find[hidden] + .music { margin-left: auto; }
+.join, .find {
+  padding: 4px 12px; border: 2px solid var(--ink); border-radius: 999px; cursor: pointer;
+  background: var(--tomato); color: #fff; font: 800 0.9rem var(--font-body); white-space: nowrap;
+  box-shadow: 2px 2px 0 var(--ink); transition: translate 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+.join[aria-pressed="true"] { background: var(--paper); color: var(--ink); }
+.find { background: var(--sun); color: var(--ink); }
+.join:hover, .find:hover { translate: -1px -1px; box-shadow: 3px 3px 0 var(--ink); }
+.join:focus-visible, .find:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+.join-dialog {
+  width: min(440px, calc(100% - 24px)); padding: 20px; border: var(--border); border-radius: var(--radius);
+  background: var(--paper); color: var(--ink); box-shadow: var(--shadow);
+}
+.join-dialog::backdrop { background: rgba(29, 26, 47, 0.45); }
+.join-dialog h2 { margin: 0 0 6px; font: 800 1.5rem var(--font-display); }
+.join-lede { margin: 0 0 14px; color: #5c5873; line-height: 1.45; }
+.join-label { display: block; margin-bottom: 4px; font-weight: 800; }
+#join-name {
+  width: 100%; padding: 10px 12px; border: 2px solid var(--ink); border-radius: 12px;
+  font: 700 1rem var(--font-body); background: #fff;
+}
+#join-name:focus-visible { outline: 3px solid var(--tomato); outline-offset: 2px; }
+.join-looks { margin: 14px 0 0; padding: 0; border: 0; }
+.join-looks legend { padding: 0; margin-bottom: 6px; font-weight: 800; }
+.looks { display: flex; flex-wrap: wrap; gap: 8px; }
+.looks label {
+  padding: 6px 10px; border: 2px solid var(--ink); border-radius: 999px; cursor: pointer;
+  background: var(--cream); font-weight: 700; font-size: 0.9rem;
+}
+.looks input { position: absolute; opacity: 0; pointer-events: none; }
+.looks input:checked + span { color: var(--ink); }
+.looks label:has(input:checked) { background: var(--sun); box-shadow: 2px 2px 0 var(--ink); }
+.looks label:has(input:focus-visible) { outline: 3px solid var(--tomato); outline-offset: 2px; }
+.join-error { margin: 12px 0 0; color: #c1121f; font-weight: 800; }
+.join-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.btn-go, .btn-ghost {
+  padding: 8px 16px; border: var(--border); border-radius: 12px; cursor: pointer;
+  font: 800 1rem var(--font-display); box-shadow: var(--shadow-sm);
+}
+.btn-go { background: var(--tomato); color: #fff; }
+.btn-ghost { background: var(--paper); color: var(--ink); }
+.btn-go:focus-visible, .btn-ghost:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+.btn-go:disabled { opacity: 0.6; cursor: wait; }
+
 .online[hidden] + .music { margin-left: auto; }
 .music {
   padding: 4px 12px; border: 2px solid var(--ink); border-radius: 999px; cursor: pointer;
@@ -121,7 +169,7 @@ body {
   .brand-mark { width: 24px; height: 24px; }
   .clock { font-size: 1rem; padding: 2px 10px; }
   .top { flex-wrap: wrap; }
-  .online, .github, .music { font-size: 0.78rem; padding: 2px 8px; }
+  .online, .github, .music, .join, .find { font-size: 0.78rem; padding: 2px 8px; }
   .loa { top: 8px; left: 8px; max-width: calc(100% - 16px); }
   .loa-tag { font-size: 0.75rem; padding: 4px 8px; }
   .loa-text { font-size: 0.85rem; }

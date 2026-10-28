@@ -19,6 +19,8 @@
   <header class="top">
     <a class="brand" href="https://peti.vn" title="Các trò khác của Peti"><span class="brand-mark" aria-hidden="true"></span>Xóm <em>Peti</em></a>
     <span class="online" id="online" hidden aria-live="polite"></span>
+    <button type="button" class="join" id="join" hidden>🏠 Về xóm</button>
+    <button type="button" class="find" id="find-me" hidden>📍 Mình</button>
     <button type="button" class="music" id="music" aria-pressed="false" title="Nhạc lofi tự sáng tác ngay trong trình duyệt">🎵 Bật nhạc</button>
     <a class="github" href="https://github.com/bonguynvan/xom" target="_blank" rel="noopener" title="Mã nguồn mở, ai cũng đóng góp được">GitHub ↗</a>
     <div class="clock" id="clock" aria-live="off">--:--</div>
@@ -32,5 +34,23 @@
     <canvas id="street" tabindex="0" aria-label="Bản đồ cả xóm. Kéo để xem quanh xóm, lăn chuột hoặc chụm hai ngón để phóng to."></canvas>
     <p class="hint" id="hint">Kéo để xem quanh xóm · lăn chuột để phóng to</p>
   </main>
+
+  <dialog class="join-dialog" id="join-dialog" aria-labelledby="join-title">
+    <form id="join-form">
+      <h2 id="join-title">🏠 Về xóm</h2>
+      <p class="join-lede">Nhân vật của bạn sẽ đi chợ, ngồi quán, tán chuyện với cả xóm cho tới khi bạn đóng trang. Ai đang xem cũng thấy bạn.</p>
+      <label class="join-label" for="join-name">Tên trong xóm</label>
+      <input id="join-name" maxlength="24" required autocomplete="nickname" spellcheck="false">
+      <fieldset class="join-looks">
+        <legend>Kiểu người</legend>
+        <div class="looks" id="join-looks"></div>
+      </fieldset>
+      <p class="join-error" id="join-error" hidden role="alert"></p>
+      <div class="join-actions">
+        <button type="button" class="btn-ghost" id="join-cancel">Thôi</button>
+        <button type="submit" class="btn-go" id="join-go">Vào xóm</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>

@@ -1,13 +1,15 @@
 // The xóm simulation. Pure: stepWorld returns a new world and never touches the old one, and every
 // random choice is noise(seed, agent, tick, purpose), so a seed replays the same day exactly.
 // People walk the graph of ways (map.js) between places; vehicles ride the main road; animals potter.
-import { CAST, GREETINGS, LOA_PHUONG, QUARRELS } from './cast.js';
+import { CAST, GREETINGS, LOA_PHUONG, QUARRELS, findCast } from './cast.js';
+import { lookById } from './guests.js';
 import { DAY, MAP, MINUTES_PER_SECOND, NODES, ROAD_LENGTH, SPEED, SPRITE, hourOf, nearestNode, nodesNear, onRoad, routeNodes } from './map.js';
 import { PLACES, QUAN_COC, findPlace, isOpen, keeperSpot } from './places.js';
 import { noise, pickWith, salt } from './rng.js';
 
 export const STEP_MS = 50;
-const PEOPLE = ['keeper', 'walker', 'kid', 'vendor'];
+const PEOPLE = ['keeper', 'walker', 'kid', 'vendor', 'guest'];
+const GUEST_LIKES = ['cho', 'traDa', 'che', 'pho', 'tapHoa', 'dinh', 'ao', 'gieng', 'benXe', 'cayBang', 'cayPhuong', 'bangDia', 'buuDien', 'sanChoi'];
 const CHAT_RANGE = 8;
 const CHAT_CHANCE = 0.03; // per step while two people pass each other
 const CHAT_COOLDOWN_MS = 30000;
@@ -26,6 +28,7 @@ const homeTarget = (a) => { const h = findPlace(a.home); return { placeId: a.hom
 
 /** Bedtimes differ a little per person so the street empties gradually. */
 function schedule(kind, seed, i) {
+  if (kind === 'guest') return { wakeAt: 0, sleepAt: 24.01 }; // a visitor comes whenever they like
   if (kind === 'keeper') return { wakeAt: 5 + noise(seed, i, S.wake), sleepAt: 21.5 + noise(seed, i, S.sleep) };
   if (kind === 'kid') return { wakeAt: 6.5 + noise(seed, i, S.wake), sleepAt: 20.5 + noise(seed, i, S.sleep) };
   return { wakeAt: 5.5 + noise(seed, i, S.wake) * 1.5, sleepAt: 20.5 + noise(seed, i, S.sleep) * 2 };
@@ -116,6 +119,7 @@ function chatter(a, env, perSecond) {
 }
 
 function updateAgent(a, env) {
+  if (a.state === 'gone') return a; // a visitor who has left (kept so indices stay put)
   if (a.state === 'chat') return env.t >= a.until ? { ...a, state: 'walk', chatWith: null, chatCooldown: env.t + CHAT_COOLDOWN_MS } : a;
   if (a.kind === 'vehicle') return drive(a, env);
   if (a.kind === 'animal') return potter(a, env);
@@ -238,7 +242,7 @@ function nextTarget(a, env) {
   if (a.kind === 'vendor') return toNode(pickWith(ENTRIES, r(1)));
   if (a.kind === 'keeper') return isOpen(findPlace(a.workplace), env.hour) ? keeperTarget(a) : homeTarget(a);
   const here = a.target?.placeId;
-  const likes = a.kind === 'walker' || a.kind === 'kid' ? [...a.likes, ...QUAN_COC] : a.likes;
+  const likes = a.kind === 'walker' || a.kind === 'kid' || a.kind === 'guest' ? [...a.likes, ...QUAN_COC] : a.likes;
   const options = likes.map(findPlace).filter((p) => p && p.id !== here && isOpen(p, env.hour));
   if (options.length === 0 || r(2) < 0.15) return toNode(Math.floor(r(3) * NODES.length) % NODES.length);
   return claimSpot(pickWith(options, r(5)), a, env);
@@ -351,6 +355,40 @@ function loudspeaker(current, minute, env) {
   if (current && env.t <= current.until) return current;
   const day = Math.floor(minute / DAY);
   return { text: pickWith(LOA_PHUONG, noise(env.seed, day, Math.floor(dayMinute), S.loa)), until: env.t + 6000 };
+}
+
+// ---------------- visitors (people watching the page who came home to the xóm) ----------------
+
+/** A visitor's character: a neighbour with their name and chosen look, stepping out of a house in the xóm. */
+function guestAgent(guest, i, world) {
+  const c = findCast(lookById(guest.look)?.castId) ?? findCast('diCho');
+  const home = findPlace(`nha${1 + (Math.abs(salt(guest.id)) % 80)}`) ?? findPlace('nha1');
+  return { i, castId: c.id, kind: 'guest', guestId: guest.id, name: guest.name, painter: c.painter, color: c.color,
+    size: (c.size ?? 68) * SPRITE, speed: 26 * SPEED, home: home.id, workplace: null, stall: 0, likes: GUEST_LIKES,
+    ...schedule('guest', world.seed, i), phase: 0, bubble: null, chatWith: null, chatCooldown: 0, until: 0,
+    target: null, path: [], at: null, exit: { entry: home.entry, door: home.door }, hx: 1, hy: 0,
+    state: 'walk', dir: 1, x: home.door.x, y: home.door.y };
+}
+
+/**
+ * Bring the world's visitors in line with the list the server sends: newcomers step out of a house, those
+ * who left are marked gone (never removed, so every index stays valid), renamed ones change. Pure.
+ */
+export function syncGuests(world, list) {
+  const wanted = new Map(list.map((g) => [g.id, g]));
+  let changed = false;
+  const agents = world.agents.map((a) => {
+    if (a.kind !== 'guest' || a.state === 'gone') return a;
+    const g = wanted.get(a.guestId);
+    if (!g) { changed = true; return { ...a, state: 'gone', target: null, path: [], bubble: null, chatWith: null }; }
+    const c = findCast(lookById(g.look)?.castId);
+    if (g.name === a.name && (!c || c.id === a.castId)) return a;
+    changed = true;
+    return { ...a, name: g.name, ...(c ? { castId: c.id, painter: c.painter, color: c.color, size: (c.size ?? 68) * SPRITE } : {}) };
+  });
+  const here = new Set(agents.filter((a) => a.kind === 'guest' && a.state !== 'gone').map((a) => a.guestId));
+  const added = list.filter((g) => !here.has(g.id)).map((g, k) => guestAgent(g, agents.length + k, world));
+  return changed || added.length ? { ...world, agents: [...agents, ...added] } : world;
 }
 
 // ---------------- the train ----------------

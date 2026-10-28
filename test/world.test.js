@@ -162,3 +162,21 @@ test('some people who bump into each other quarrel instead of chatting', () => {
   }
   assert.ok(angry > 0, 'nobody ever quarrelled');
 });
+
+test('visitors step out of a house, live like neighbours day and night, and leave without disturbing anyone', async () => {
+  const { syncGuests } = await import('../public/js/world.js');
+  const start = deepFreeze(run(createWorld({ seed: 6, minute: 23 * 60 }), 5));
+  const before = start.agents.length;
+  let w = syncGuests(start, [{ id: 'g1', name: 'Cu Tèo', look: 'treCon' }, { id: 'g2', name: 'Cô Ba', look: 'aoDai' }]);
+  assert.equal(w.agents.length, before + 2);
+  assert.deepEqual(w.agents.slice(-2).map((a) => [a.i, a.kind, a.name]), [[before, 'guest', 'Cu Tèo'], [before + 1, 'guest', 'Cô Ba']]);
+  assert.equal(syncGuests(w, [{ id: 'g1', name: 'Cu Tèo', look: 'treCon' }, { id: 'g2', name: 'Cô Ba', look: 'aoDai' }]), w, 'nothing changed, same world');
+  w = run(w, 120);
+  const g1 = w.agents.find((a) => a.guestId === 'g1');
+  assert.notEqual(g1.state, 'inside', 'a visitor at midnight is out and about, not in bed');
+  w = deepFreeze(syncGuests(w, [{ id: 'g2', name: 'Cô Ba Béo', look: 'aoDai' }]));
+  assert.equal(w.agents.find((a) => a.guestId === 'g1').state, 'gone');
+  assert.equal(w.agents.find((a) => a.guestId === 'g2').name, 'Cô Ba Béo');
+  assert.doesNotThrow(() => run(w, 60), 'the world carries on with a gone visitor in it');
+  w.agents.forEach((a, k) => assert.equal(a.i, k));
+});
