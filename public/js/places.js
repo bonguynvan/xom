@@ -11,7 +11,7 @@ const ROOF_DEPTH = 0.6; // keep in step with buildings.js
 const FLOOR = 46; // facade units per floor (buildings.js)
 const REACH = 30; // how far a door may be from its way
 const YARD = 68; // a house behind an alley stands this far from it: its two-floor roof stays clear
-const HOMES = 80; // houses with a name the cast can live in (nha1..nha80)
+const HOMES = 80; // houses with a name the cast can live in (nha1..nha80; the night vendors live in 29-31)
 const COLORS = ['#f0cf6a', '#e9c46a', '#f2d888', '#f0cf6a', '#efe3c2', '#b9d8c8', '#e8b4a0', '#bcd2dc', '#f1ece0', '#e3b75e'];
 export const facadeUnits = (floors) => (floors * FLOOR + 16) * K;
 

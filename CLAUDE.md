@@ -43,6 +43,17 @@ No dependencies, no build step.
   crowd (~400 people on the pavement stools, in the market, kids on the bare ground) that is a pure function
   of the clock, not simulated. `meet()` uses a grid so a thousand walkers stay cheap. `sprites.js` caches the
   ground, every building and every resident pose as bitmaps (zoom ≤ 2); speech bubbles are capped per frame.
+- Talk: `lines.js` pools (any time, by part of day, by place, by weather, catchphrases, more greetings and
+  quarrels, traffic quarrels, honks). `pickLine` draws from weighted pools and each agent remembers its last 6
+  lines (`recent`) so it does not repeat; greetings and quarrels avoid recent lines too (`freshPair`).
+- Day and night: bedtimes spread from 19:00 (a few owls past midnight; `awake()` handles sleepAt > 24); people
+  go home for a while (`until`) at lunch, in the rain, now and then; night vendors (`hours` in the cast) 19:30-1:30.
+- Traffic: ~200 riders (cast TRAFFIC) out by `trafficAt(hour)` (rush 7:30 and 17:30); sub-lanes; car-following on
+  the previous step's positions (`gapsAhead`), so queues form; hasty riders get close and sometimes `bump`
+  (both stop and quarrel, a star is drawn). Visual only.
+- Weather: `scripts/weather.js` fetches Hà Nội from Open-Meteo every 15 min (server side; WEATHER=off disables);
+  the admin can force a kind (settings.weather). Pages get it on /api/live and call `setWeather`: rain sends people
+  home and thins the crowd, heat fills the pond with swimmers, tint/rain drawn in render.js, music adds rain.
 - Loa phường: the admin announcement (and maintenance) from /api/live crawls in a ticker top-left of the map
   (CSS animation, speed set from the measured width) until it is cleared or replaced; the loudspeaker on its
   pole reads it out as a bubble for 9 s every 45 s (main.js withAnnouncement). Long bubbles are cut with …

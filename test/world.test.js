@@ -125,7 +125,7 @@ const everyMinute = (world, minutes, check) => {
 test('street vendors keep walking all over the xóm', () => {
   const span = new Map();
   everyMinute(createWorld({ seed: 11, minute: 7 * 60 }), 13 * 60, (w) => {
-    for (const a of w.agents.filter((x) => x.kind === 'vendor')) {
+    for (const a of w.agents.filter((x) => x.kind === 'vendor' && x.wakeAt < 12)) { // the day vendors (the night ones sleep now)
       const [lo, hi] = span.get(a.i) ?? [Infinity, -Infinity];
       span.set(a.i, [Math.min(lo, a.x), Math.max(hi, a.x)]);
     }
@@ -179,4 +179,88 @@ test('visitors step out of a house, live like neighbours day and night, and leav
   assert.equal(w.agents.find((a) => a.guestId === 'g2').name, 'Cô Ba Béo');
   assert.doesNotThrow(() => run(w, 60), 'the world carries on with a gone visitor in it');
   w.agents.forEach((a, k) => assert.equal(a.i, k));
+});
+
+test('the road fills up at rush hour and empties at night', async () => {
+  const { trafficAt } = await import('../public/js/world.js');
+  assert.ok(trafficAt(7.5) > 0.8 && trafficAt(17.5) > 0.8, 'rush hours');
+  assert.ok(trafficAt(12) < trafficAt(7.5) && trafficAt(3) < 0.1, 'quieter at noon, empty at night');
+  const onRoad = (h) => run(createWorld({ seed: 4, minute: h * 60 }), 20).agents.filter((a) => a.kind === 'vehicle' && a.state !== 'away').length;
+  assert.ok(onRoad(7.5) > onRoad(12) * 1.3 && onRoad(12) > onRoad(3) * 3, 'more riders out at rush hour');
+});
+
+test('at rush hour riders queue behind each other', () => {
+  let w = createWorld({ seed: 4, minute: 7.5 * 60 });
+  let queued = 0;
+  for (let k = 0; k < 1200; k += 1) {
+    const before = w;
+    w = stepWorld(w, STEP_MS);
+    for (const a of w.agents) {
+      if (a.kind !== 'vehicle' || a.state !== 'drive' || a.hasty) continue;
+      const was = before.agents[a.i];
+      if (was.state === 'drive' && Math.abs(a.s - was.s) < a.speed * (STEP_MS / 1000) * 0.7) queued += 1; // held up by the one in front
+    }
+  }
+  assert.ok(queued > 100, 'at rush hour riders are held up behind others');
+});
+
+test('people talk about the hour, the place and the weather, and do not repeat themselves', async () => {
+  const { setWeather } = await import('../public/js/world.js');
+  let w = setWeather(createWorld({ seed: 8, minute: 9 * 60 }), { kind: 'rain', tempC: 24 });
+  const said = new Map();
+  for (let k = 0; k < 2400; k += 1) {
+    w = stepWorld(w, STEP_MS);
+    for (const a of w.agents) if (a.bubble && a.bubble.from === w.t) said.set(a.i, [...(said.get(a.i) ?? []), a.bubble.text]);
+  }
+  const all = [...said.values()].flat();
+  assert.ok(new Set(all).size > 150, `${new Set(all).size} different lines in two minutes`);
+  assert.ok(all.some((t) => t.toLowerCase().includes('mưa')), 'someone mentions the rain');
+  for (const [i, lines] of said) {
+    for (let n = 1; n < lines.length; n += 1) assert.notEqual(lines[n], lines[n - 1], `agent ${i} repeats itself`);
+  }
+});
+
+test('rain keeps people in: fewer out than on a dry day', async () => {
+  const { setWeather } = await import('../public/js/world.js');
+  const out = (kind) => {
+    const w = run(setWeather(createWorld({ seed: 12, minute: 6 * 60 }), { kind, tempC: 26 }), 240);
+    return w.agents.filter((a) => (a.kind === 'walker' || a.kind === 'kid') && a.state !== 'inside').length;
+  };
+  assert.ok(out('rain') < out('clear') * 0.8, 'the rain empties the alleys');
+});
+
+test('night vendors are out past midnight and home before dawn', () => {
+  const vendors = (w) => w.agents.filter((a) => a.kind === 'vendor' && a.wakeAt >= 19);
+  const late = run(createWorld({ seed: 3, minute: 23 * 60 + 50 }), 40); // 00:30
+  assert.ok(vendors(late).length >= 3);
+  assert.ok(vendors(late).every((a) => a.state !== 'inside'), 'all calling down the alleys at half past midnight');
+  const dawn = run(createWorld({ seed: 3, minute: 4 * 60 }), 20);
+  assert.ok(vendors(dawn).every((a) => a.state === 'inside'), 'all home by four');
+});
+
+test('careful riders never end up inside the rider in front, and a bump is followed by a breather', () => {
+  let w = createWorld({ seed: 4, minute: 7.5 * 60 });
+  const bumpedAt = new Map();
+  for (let k = 0; k < 1200; k += 1) {
+    const before = w;
+    w = stepWorld(w, STEP_MS);
+    const lanes = new Map();
+    for (const a of w.agents) {
+      if (a.kind !== 'vehicle' || (a.state !== 'drive' && a.state !== 'bump')) continue;
+      const key = `${a.dir}:${Math.round(a.sub / 5)}`;
+      lanes.set(key, [...(lanes.get(key) ?? []), a]);
+      if (a.state === 'bump' && before.agents[a.i].state !== 'bump') {
+        if (bumpedAt.has(a.i)) assert.ok(w.t - bumpedAt.get(a.i) > 20000, `rider ${a.i} bumps again too soon`);
+        bumpedAt.set(a.i, w.t);
+      }
+    }
+    for (const list of lanes.values()) {
+      const order = [...list].sort((p, q) => (p.s - q.s) * p.dir);
+      for (let n = 0; n < order.length - 1; n += 1) {
+        const [me, front] = [order[n], order[n + 1]];
+        if (me.hasty) continue;
+        assert.ok(Math.abs(front.s - me.s) > (me.size + front.size) * 0.45 - 1, `rider ${me.i} drove into ${front.i}`);
+      }
+    }
+  }
 });

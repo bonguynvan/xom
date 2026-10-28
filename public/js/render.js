@@ -8,6 +8,7 @@ import { PLACES, POLES } from './places.js';
 import { drawLampGlows, drawTrain, drawWires, isMarketOpen, standing } from './scenery.js';
 import { buildingLayer, groundLayer, residentLayer } from './sprites.js';
 import { trainAt } from './world.js';
+import { noise } from './rng.js';
 
 const BUILDINGS = PLACES.filter((p) => p.building);
 const EXTRAS = extrasFrom(CAST);
@@ -68,29 +69,99 @@ export function renderFrame(ctx, world, prev, alpha, view) {
   drawTrain(ctx, train);
 
   const open = { cho: isMarketOpen(hour), hour, t: world.t };
+  const weather = world.weather?.kind ?? 'clear';
   const residents = world.agents.filter(visibleState).map((a) => ({ a, ...placeOf(a, prev?.agents[a.i], alpha) })).filter((r) => seen(r.x, r.y));
   const items = [
     ...BUILDINGS.filter((p) => p.x + p.w > x0 && p.x < x1 && p.front > y0 && p.front - 100 < y1)
       .map((p) => ({ y: p.front, draw: (c) => { buildingLayer(c, p, view); drawDoorGlow(c, p, dark); } })),
     ...standing(train),
-    ...extrasAt(EXTRAS, hour, world.t).filter((e) => seen(e.x, e.y)).map((e) => ({ y: e.y, draw: (c) => residentLayer(c, e.agent,
-      findCast(e.agent.castId).look, { x: e.x, y: e.y, size: e.agent.size, moving: e.moving }, view) })),
+    ...extrasAt(EXTRAS, hour, world.t, weather).filter((e) => seen(e.x, e.y)).map((e) => ({ y: e.y, draw: e.swim === undefined
+      ? (c) => residentLayer(c, e.agent, findCast(e.agent.castId).look, { x: e.x, y: e.y, size: e.agent.size, moving: e.moving }, view)
+      : (c) => swimmer(c, e, view) })),
     ...residents.map((r) => (r.a.kind === 'flyer'
       ? { y: Infinity, draw: (c) => flyer(c, r, view) }
       : { y: r.y, draw: (c) => residentLayer(c, r.a, findCast(r.a.castId).look,
         { x: r.x, y: r.y, size: r.a.size, moving: r.a.state === 'walk' || r.a.state === 'drive' }, view) })),
+    ...residents.filter((r) => r.a.state === 'bump').map((r) => ({ y: r.y + 0.1, draw: (c) => bumpStar(c, r, world.t) })),
   ].sort((p, q) => p.y - q.y);
   for (const item of items) item.draw(ctx, open, dark);
   drawWires(ctx);
 
   if (warm > 0) tint(ctx, `rgba(255, 150, 80, ${warm * 0.16})`);
+  if (WEATHER_TINT[weather]) tint(ctx, WEATHER_TINT[weather]);
   if (dark > 0) {
     tint(ctx, `rgba(12, 14, 40, ${dark * 0.6})`);
     for (const p of BUILDINGS) if (p.x + p.w > x0 && p.x < x1) drawWindowLights(ctx, p, dark);
     drawLampGlows(ctx, dark);
   }
   ctx.restore();
+  if (weather === 'rain' || weather === 'storm') rain(ctx, view, world.t, weather === 'storm');
   speech(ctx, world, view, residents);
+}
+
+// ---------------- the weather ----------------
+
+/** How the light looks: grey and wet in the rain, washed out in fog, golden in a heat wave, blue in the cold. */
+const WEATHER_TINT = {
+  rain: 'rgba(40, 55, 80, 0.22)', storm: 'rgba(25, 30, 55, 0.32)', cloudy: 'rgba(120, 125, 140, 0.12)',
+  fog: 'rgba(225, 228, 235, 0.32)', hot: 'rgba(255, 190, 90, 0.10)', cold: 'rgba(160, 195, 255, 0.12)',
+};
+
+/** Falling rain, in screen space: slanted streaks drifting with time (and lightning in a storm). */
+function rain(ctx, view, t, storm) {
+  const px = view.dpr ?? 1;
+  const drops = Math.round((view.w * view.h) / (5200 * px * px)) * (storm ? 2 : 1);
+  ctx.strokeStyle = storm ? 'rgba(210, 225, 255, 0.55)' : 'rgba(205, 220, 250, 0.45)';
+  ctx.lineWidth = px;
+  ctx.beginPath();
+  for (let k = 0; k < drops; k += 1) {
+    const speed = 0.55 + noise(k, 191) * 0.35;
+    const x = ((noise(k, 192) * view.w + t * 0.12 * speed * px) % (view.w + 40 * px)) - 20 * px;
+    const y = ((noise(k, 193) * view.h + t * speed * px) % (view.h + 30 * px)) - 15 * px;
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - 3 * px, y + 12 * px);
+  }
+  ctx.stroke();
+  if (storm && noise(Math.floor(t / 900), 194) < 0.04) { // a flash of lightning, now and then
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.fillRect(0, 0, view.w, view.h);
+  }
+}
+
+/** A child in the pond: only the head and shoulders above the water, a ring of ripples round them. */
+function swimmer(ctx, e, view) {
+  const size = e.agent.size;
+  const water = e.y - size * 0.5 + e.swim;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(e.x - size, water - size * 2, size * 2, size * 2);
+  ctx.clip();
+  residentLayer(ctx, e.agent, findCast(e.agent.castId).look, { x: e.x, y: e.y + e.swim, size, moving: true }, view);
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.ellipse(e.x, water, size * 0.32, size * 0.08, 0, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+/** Two riders who just touched: a little yellow star between them. */
+function bumpStar(ctx, r, t) {
+  const pulse = 1 + Math.sin(t / 120) * 0.15;
+  const cx = r.x + r.a.dir * r.a.size * 0.35;
+  const cy = r.y - r.a.size * 0.45;
+  ctx.fillStyle = '#ffd23f';
+  ctx.strokeStyle = '#1d1a2f';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  for (let k = 0; k < 16; k += 1) {
+    const rad = (k % 2 ? 2 : 4.5) * pulse;
+    const a = (k / 16) * Math.PI * 2;
+    ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
 }
 
 // ---------------- what people say ----------------

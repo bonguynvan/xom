@@ -5,7 +5,7 @@ import { hourOf } from './map.js';
 import { renderFrame } from './render.js';
 import { GUEST_LOOKS, cleanName, randomName } from './guests.js';
 import { createMusic } from './music.js';
-import { STEP_MS, createWorld, stepWorld, syncGuests } from './world.js';
+import { STEP_MS, createWorld, setWeather, stepWorld, syncGuests } from './world.js';
 
 const MAX_STEPS_PER_FRAME = 40; // only guards a slow frame
 const MAX_GAP_MS = 1000; // a longer pause means the tab was hidden or asleep
@@ -206,6 +206,7 @@ function listen() {
     try { data = JSON.parse(event.data); } catch { return; }
     state.guests = Array.isArray(data.guests) ? data.guests : [];
     state.world = syncGuests(state.world, state.guests);
+    if (data.weather) state.world = setWeather(state.world, data.weather);
     if (state.me && !state.guests.some((g) => g.id === state.me)) { state.me = null; showJoin(); }
     const online = Number(data.online) || 0;
     $('online').hidden = online < 1;
@@ -303,7 +304,7 @@ $('join-form').addEventListener('submit', async (event) => {
 
 // ---------------- music: lofi made in the browser, following the xóm's hour ----------------
 
-const music = createMusic({ hourOf: () => hourOf(state.world.minute), seed: daySeed() });
+const music = createMusic({ hourOf: () => hourOf(state.world.minute), seed: daySeed(), weatherOf: () => state.world.weather?.kind ?? 'clear' });
 $('music').addEventListener('click', async () => {
   const on = !music.playing;
   $('music').setAttribute('aria-pressed', String(on));

@@ -213,6 +213,20 @@ const RESIDENTS = [
     look: { skin: '#e7b58a', eyes: 'dot', mouth: 'o' },
     lines: ['Xôi nóng đâyyy!', 'Bánh đúc nóng đây!', 'Ai bỏng ngô không?'] },
 
+  // night vendors: out from half past seven till the small hours, calling down the alleys
+  { id: 'banhGio', painter: 'ganhHang', kind: 'vendor', names: ['Bà bánh giò', 'Cô bánh giò ngõ Nam', 'Bác bánh giò'], home: 'nha29', color: '#7cb342', speed: 13, hours: [19.5, 25.5],
+    bio: 'Nồi bánh giò ủ trong chăn bông, đi từ tối đến khuya, tiếng rao nghe là biết đã muộn.',
+    look: { skin: '#e2b08a', eyes: 'sleepy', mouth: 'o' },
+    lines: ['Ai bánh giò đêêê!', 'Bánh giò nóng đây!', 'Bánh giò, bánh dày giò đêêê!', 'Ai bánh giò nóng không?'] },
+  { id: 'banhMiDem', painter: 'ganhHang', kind: 'vendor', names: ['Chú bánh mì đêm', 'Anh bánh mì pa-tê'], home: 'nha30', color: '#d9a441', speed: 15, hours: [20, 25],
+    bio: 'Bánh mì nóng giòn cho người đi làm ca, sinh viên thức khuya.',
+    look: { skin: '#e7b58a', eyes: 'dot', mouth: 'o' },
+    lines: ['Bánh mì nóng giòn đêêê!', 'Ai bánh mì pa-tê đêêê!'] },
+  { id: 'xoiKhuya', painter: 'ganhHang', kind: 'vendor', names: ['Cô xôi khuya'], home: 'nha31', color: '#f2b705', speed: 14, hours: [21, 25.5],
+    bio: 'Xôi xéo, xôi lạc gói lá chuối, bán cho người về muộn.',
+    look: { skin: '#f0c8a2', eyes: 'round', mouth: 'smile' },
+    lines: ['Xôi khuya nóng đây!', 'Xôi xéo, xôi lạc đây!'] },
+
   // ---------------- on the road ----------------
   { id: 'chuLam', painter: 'xeOm', kind: 'vehicle', names: ['Chú Lâm xe ôm', 'Anh Tâm xe ôm', 'Chú Tư xe ôm'], color: '#c1121f', speed: 64, size: 86,
     bio: 'Chiếc Cub 50 đời đầu, mũ cối, áo bộ đội. Chở cả bao gạo lẫn cô dâu.',
@@ -266,8 +280,19 @@ const RESIDENTS = [
 
 ];
 
-/** @type {Array<object>} Everyone: the residents above, everybody else in the xóm, and the visitors from Đua Vịt. */
-export const CAST = [...RESIDENTS, ...crowd(new Set([...RESIDENTS, ...DUAVIT_CAST].flatMap((c) => c.names))), ...DUAVIT_CAST];
+/** The traffic: Cubs and bicycles in every colour, how many on the road depends on the hour (world.trafficAt). */
+const RIDER_LINES = ['Bim bim!', 'Tránh ra nào!', 'Muộn làm rồi!', 'Đi nhanh lên!', 'Xe ôm không?'];
+const TRAFFIC = [
+  ...['#c1121f', '#2d9cdb', '#3f8f6b', '#e9dcc0', '#8d1c2f', '#f2b705', '#5c5873'].map((color, k) => ({
+    id: `xeMay${k}`, painter: 'xeOm', kind: 'vehicle', names: Array.from({ length: 22 }, (_, n) => `Xe máy ${k * 22 + n + 1}`),
+    color, speed: 52 + k * 3, size: 86, bio: 'Người đi làm, đi chợ, đưa con đi học trên con Cub.', look: { skin: '#d8a477', eyes: 'dot', mouth: 'flat' }, lines: RIDER_LINES })),
+  ...['#c94f3d', '#2d9cdb', '#3f8f6b'].map((color, k) => ({
+    id: `xeDap${k}`, painter: 'coGiao', kind: 'vehicle', names: Array.from({ length: 14 }, (_, n) => `Xe đạp ${k * 14 + n + 1}`),
+    color: '#f4f1ea', speed: 30 + k * 3, size: 86, bio: 'Đạp xe đi làm, đi học.', look: { skin: '#f2cdb0', eyes: 'round', mouth: 'smile' }, lines: ['Kính coong!', 'Muộn học rồi!'] })),
+];
+
+/** @type {Array<object>} Everyone: the residents above, everybody else in the xóm, the traffic, and the visitors from Đua Vịt. */
+export const CAST = [...RESIDENTS, ...crowd(new Set([...RESIDENTS, ...DUAVIT_CAST].flatMap((c) => c.names))), ...TRAFFIC, ...DUAVIT_CAST];
 
 /** Daytime hours used by keepers and most walkers; the night belongs to the street lamps. */
 export const DAYTIME_HOURS = DAYTIME;

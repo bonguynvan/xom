@@ -3,6 +3,7 @@
 // People walk the graph of ways (map.js) between places; vehicles ride the main road; animals potter.
 import { CAST, GREETINGS, LOA_PHUONG, QUARRELS, findCast } from './cast.js';
 import { lookById } from './guests.js';
+import { ANYTIME, BY_HOUR, BY_PLACE, BY_WEATHER, HONKS, MEMES, MORE_GREETINGS, MORE_QUARRELS, TRAFFIC_QUARRELS, partOfDay } from './lines.js';
 import { DAY, MAP, MINUTES_PER_SECOND, NODES, ROAD_LENGTH, SPEED, SPRITE, hourOf, nearestNode, nodesNear, onRoad, routeNodes } from './map.js';
 import { PLACES, QUAN_COC, findPlace, isOpen, keeperSpot } from './places.js';
 import { noise, pickWith, salt } from './rng.js';
@@ -14,11 +15,20 @@ const CHAT_RANGE = 8;
 const CHAT_CHANCE = 0.03; // per step while two people pass each other
 const CHAT_COOLDOWN_MS = 30000;
 const LANE = 8; // vehicles keep right: east-bound nearer the viewer
+const SUB_LANE = 5; // riders spread over a few sub-lanes on their side
+const FOLLOW_GAP = 5; // a rider slows when this close behind the one in front, and stops at about FOLLOW_GAP
+const FOLLOW_SPAN = 14;
+const BUMP_CHANCE = 0.012; // per step for two riders practically touching (only the hasty ones get that close)
+const RECENT = 6; // lines a person remembers saying, and will not say again soon
+const ALL_GREETINGS = [...GREETINGS, ...MORE_GREETINGS];
+const ALL_QUARRELS = [...QUARRELS, ...MORE_QUARRELS];
+const YOUNG_KINDS = new Set(['kid', 'stray', 'guest']);
 const ROAD_END = 140; // the road line runs on past both edges of the map; vehicles start inside it
 const S = { exit: salt('exit'), target: salt('target'), spot: salt('spot'), stay: salt('stay'), say: salt('say'),
   line: salt('line'), wake: salt('wake'), sleep: salt('sleep'), meet: salt('meet'), greet: salt('greet'),
   away: salt('away'), quarrel: salt('quarrel'), dir: salt('dir'), start: salt('start'), wander: salt('wander'), pause: salt('pause'),
-  loa: salt('loa'), walk: salt('walk') };
+  loa: salt('loa'), walk: salt('walk'), rank: salt('rank'), lane: salt('lane'), hasty: salt('hasty'), bump: salt('bump'),
+  pool: salt('pool'), rain: salt('rain') };
 
 const ENTRIES = PLACES.map((p) => p.entry);
 const pt = (p) => ({ x: p.x, y: p.y, n: -1 });
@@ -27,13 +37,17 @@ const toNode = (id) => ({ placeId: null, spot: null, entry: id, door: null, poin
 const homeTarget = (a) => { const h = findPlace(a.home); return { placeId: a.home, spot: null, home: true, entry: h.entry, door: h.door, point: h.door }; };
 
 /** Bedtimes differ a little per person so the street empties gradually. */
-function schedule(kind, seed, i) {
+function schedule(kind, seed, i, hours) {
+  if (hours) return { wakeAt: hours[0], sleepAt: hours[1] }; // night vendors: e.g. 19.5 to 25.5 (1:30 at night)
   if (kind === 'guest') return { wakeAt: 0, sleepAt: 24.01 }; // a visitor comes whenever they like
   if (kind === 'keeper') return { wakeAt: 5 + noise(seed, i, S.wake), sleepAt: 21.5 + noise(seed, i, S.sleep) };
-  if (kind === 'kid') return { wakeAt: 6.5 + noise(seed, i, S.wake), sleepAt: 20.5 + noise(seed, i, S.sleep) };
-  return { wakeAt: 5.5 + noise(seed, i, S.wake) * 1.5, sleepAt: 20.5 + noise(seed, i, S.sleep) * 2 };
+  if (kind === 'kid') return { wakeAt: 6.5 + noise(seed, i, S.wake), sleepAt: 19.3 + noise(seed, i, S.sleep) * 1.5 };
+  const owl = noise(seed, i, S.sleep, 2) < 0.08; // a few are out till past midnight
+  // The later it gets, the emptier the alleys: bedtimes spread from seven to half past ten.
+  return { wakeAt: 5.5 + noise(seed, i, S.wake) * 1.5, sleepAt: owl ? 24.5 + noise(seed, i, S.sleep) : 19 + noise(seed, i, S.sleep) * 3.5 };
 }
-const awake = (a, hour) => hour >= a.wakeAt && hour < a.sleepAt;
+/** Awake at this hour? A bedtime past 24 means after midnight. */
+const awake = (a, hour) => (a.sleepAt > 24 ? hour >= a.wakeAt || hour < a.sleepAt - 24 : hour >= a.wakeAt && hour < a.sleepAt);
 
 /** `rate` is game minutes per real second: 1/60 is real time, the default 1 shows a day in 24 minutes. */
 export function createWorld({ seed = 1, minute = 7 * 60, rate = MINUTES_PER_SECOND } = {}) {
@@ -42,12 +56,13 @@ export function createWorld({ seed = 1, minute = 7 * 60, rate = MINUTES_PER_SECO
   const agents = CAST.flatMap((c) => c.names.map((name) => {
     const base = { i, castId: c.id, kind: c.kind, name, painter: c.painter, color: c.color, size: (c.size ?? 68) * SPRITE,
       speed: (c.speed ?? 24) * SPEED, home: c.home ?? null, workplace: c.place ?? null, stall: c.stall ?? 0, likes: c.likes ?? [],
-      ...schedule(c.kind, seed, i), phase: 0, bubble: null, chatWith: null, chatCooldown: 0, until: 0,
-      target: null, path: [], at: null, exit: null, hx: 1, hy: 0 };
+      ...schedule(c.kind, seed, i, c.hours), phase: 0, bubble: null, chatWith: null, chatCooldown: 0, until: 0,
+      target: null, path: [], at: null, exit: null, hx: 1, hy: 0, recent: [],
+      rank: noise(seed, i, S.rank), sub: (noise(seed, i, S.lane) - 0.5) * 2 * SUB_LANE, hasty: noise(seed, i, S.hasty) < 0.08 };
     i += 1;
     return place(base, seed, hour);
   }));
-  return { seed, t: 0, tick: 0, minute, rate, agents, broadcast: null };
+  return { seed, t: 0, tick: 0, minute, rate, agents: untangle(agents), broadcast: null, weather: { kind: 'clear', tempC: 28 } };
 }
 
 /** Where an animal likes to be: in the pond, or somewhere along the ways near its home. */
@@ -63,12 +78,32 @@ function haunt(a, r1, r2) {
   return { node: id, x: NODES[id].x, y: NODES[id].y };
 }
 
+/** Riders scattered on the road at the start must not sit on top of each other: the ones that would wait off the map. */
+function untangle(agents) {
+  const parked = new Set();
+  const lanes = new Map();
+  for (const a of agents) {
+    if (a.kind !== 'vehicle' || a.state !== 'drive') continue;
+    const key = `${a.dir}:${Math.round((a.sub ?? 0) / SUB_LANE)}`;
+    lanes.set(key, [...(lanes.get(key) ?? []), a]);
+  }
+  for (const list of lanes.values()) {
+    let last = null;
+    for (const a of [...list].sort((p, q) => p.s - q.s)) {
+      if (last && a.s - last.s < (a.size + last.size) * 0.45 + FOLLOW_GAP) parked.add(a.i);
+      else last = a;
+    }
+  }
+  return parked.size === 0 ? agents : agents.map((a) => (parked.has(a.i) ? { ...a, state: 'away', until: 0 } : a));
+}
+
 /** Where an agent starts the day (or the night). */
 function place(a, seed, hour) {
   const r = (k) => noise(seed, a.i, S.start, k);
   if (a.kind === 'vehicle') {
     const dir = r(1) < 0.5 ? 1 : -1;
-    return { ...a, state: 'drive', dir, ...ride(ROAD_END + r(2) * (ROAD_LENGTH - 2 * ROAD_END), dir) };
+    const on = { ...a, dir, ...ride(ROAD_END + r(2) * (ROAD_LENGTH - 2 * ROAD_END), dir, a.sub) };
+    return onTheRoad(a, hour) ? { ...on, state: 'drive' } : { ...on, state: 'away', until: 0 };
   }
   if (a.kind === 'flyer') return { ...a, state: 'fly', dir: r(3) < 0.5 ? 1 : -1, x: r(4) * MAP.w, y: r(5) * MAP.h };
   if (a.kind === 'stray') {
@@ -90,17 +125,78 @@ function place(a, seed, hour) {
   return { ...a, state: 'walk', dir: r(1) < 0.5 ? 1 : -1, x: NODES[id].x, y: NODES[id].y, at: id };
 }
 
-const ride = (s, dir) => ({ s, ...onRoad(s, dir > 0 ? LANE : -LANE) });
+const ride = (s, dir, sub = 0) => ({ s, ...onRoad(s, (dir > 0 ? LANE : -LANE) + sub) });
+
+/** How busy the road is, 0..1: the morning and evening rush, lunch, quiet nights. */
+export function trafficAt(hour) {
+  const peak = (h, at, width) => Math.max(0, 1 - Math.abs(h - at) / width);
+  return Math.min(1, 0.04 + 0.3 * peak(hour, 12, 6.5) + 0.8 * peak(hour, 7.4, 1.4) + 0.8 * peak(hour, 17.4, 1.5) + 0.2 * peak(hour, 20, 2.5));
+}
+/** Is this rider out at this hour? The busier the hour, the more of them are. */
+const onTheRoad = (a, hour) => a.rank < trafficAt(hour);
 
 export function stepWorld(world, dt = STEP_MS) {
   const t = world.t + dt;
   const rate = world.rate ?? MINUTES_PER_SECOND;
   const minute = world.minute + (dt / 1000) * rate;
   const tick = world.tick + 1;
-  const env = { seed: world.seed, t, dt, tick, rate, hour: hourOf(minute), claims: claimedSpots(world.agents) };
+  const env = { seed: world.seed, t, dt, tick, rate, hour: hourOf(minute), claims: claimedSpots(world.agents),
+    ahead: gapsAhead(world.agents), entering: new Set(), weather: world.weather?.kind ?? 'clear' };
   // Agents decide one after another so two of them never grab the same stool in the same step.
   const agents = world.agents.map((a) => expireBubble(updateAgent(a, env), t));
-  return { ...world, t, minute, tick, agents: meet(agents, env), broadcast: loudspeaker(world.broadcast, minute, env) };
+  return { ...world, t, minute, tick, agents: bumps(meet(agents, env), env), broadcast: loudspeaker(world.broadcast, minute, env) };
+}
+
+/** The xóm's weather (from the server): { kind: 'clear' | 'cloudy' | 'fog' | 'rain' | 'storm' | 'hot' | 'cold', tempC }. Pure. */
+export function setWeather(world, weather) {
+  const kind = ['clear', 'cloudy', 'fog', 'rain', 'storm', 'hot', 'cold'].includes(weather?.kind) ? weather.kind : 'clear';
+  const tempC = Number.isFinite(weather?.tempC) ? weather.tempC : world.weather?.tempC ?? 28;
+  return world.weather?.kind === kind && world.weather?.tempC === tempC ? world : { ...world, weather: { kind, tempC } };
+}
+const rainy = (env) => env.weather === 'rain' || env.weather === 'storm';
+
+/** For every rider on the road: the free road in front of them in their own sub-lane (from the last step). */
+function gapsAhead(agents) {
+  const lanes = new Map();
+  for (const a of agents) {
+    if (a.kind !== 'vehicle' || (a.state !== 'drive' && a.state !== 'bump')) continue;
+    const key = `${a.dir}:${Math.round((a.sub ?? 0) / SUB_LANE)}`;
+    lanes.set(key, [...(lanes.get(key) ?? []), a]);
+  }
+  const gaps = new Map();
+  // how much free road there is at the end where riders come in, per sub-lane (key 'entry:dir:lane')
+  for (const [key, list] of lanes) {
+    const dir = Number(key.split(':')[0]);
+    const room = Math.min(...list.map((a) => (dir > 0 ? a.s : ROAD_LENGTH - a.s)));
+    gaps.set(`entry:${key}`, room);
+  }
+  for (const list of lanes.values()) {
+    const order = [...list].sort((p, q) => (p.s - q.s) * p.dir); // from the back of the queue to the front
+    for (let k = 0; k < order.length - 1; k += 1) {
+      const me = order[k];
+      const front = order[k + 1];
+      gaps.set(me.i, { gap: Math.abs(front.s - me.s) - (me.size + front.size) * 0.45, front: front.i });
+    }
+  }
+  return gaps;
+}
+
+/** Two riders who touch: both stop and have words, then carry on. Visual only, nobody is hurt. */
+function bumps(agents, env) {
+  const hits = new Map();
+  for (const a of agents) {
+    if (a.kind !== 'vehicle' || a.state !== 'drive' || hits.has(a.i)) continue;
+    const ahead = env.ahead.get(a.i);
+    if (!ahead || ahead.gap > 1.5 || hits.has(ahead.front)) continue;
+    const b = agents[ahead.front];
+    if (b.state !== 'drive' || env.t < a.chatCooldown || env.t < b.chatCooldown) continue; // just had words: not again so soon
+    if (noise(env.seed, a.i, b.i, env.tick, S.bump) >= BUMP_CHANCE) continue;
+    const [opener, reply] = freshPair(TRAFFIC_QUARRELS, a, b, noise(env.seed, a.i, b.i, env.tick, S.greet));
+    const until = env.t + 4500 + noise(env.seed, b.i, a.i, env.tick, S.stay) * 3000;
+    hits.set(a.i, remember(say({ ...a, state: 'bump', until }, opener, env, 0, 2600, true), opener));
+    hits.set(b.i, remember(say({ ...b, state: 'bump', until }, reply, env, 1300, 2600, true), reply));
+  }
+  return hits.size === 0 ? agents : agents.map((a) => hits.get(a.i) ?? a);
 }
 
 function claimedSpots(agents) {
@@ -111,11 +207,58 @@ function claimedSpots(agents) {
 
 const expireBubble = (a, t) => (a.bubble && t > a.bubble.until ? { ...a, bubble: null } : a);
 const say = (a, text, env, delay = 0, ms = 3200, angry = false) => ({ ...a, bubble: { text, from: env.t + delay, until: env.t + delay + ms, angry } });
-const linesOf = (a) => CAST.find((c) => c.id === a.castId).lines;
+const LINES_BY_CAST = new Map(CAST.map((c) => [c.id, c.lines]));
+const linesOf = (a) => LINES_BY_CAST.get(a.castId) ?? [];
 /** Now and then, out of the blue: a line of their own. `perSecond` is the expected rate. */
 function chatter(a, env, perSecond) {
   if (a.bubble || linesOf(a).length === 0 || noise(env.seed, a.i, env.tick, S.say) >= perSecond * (env.dt / 1000)) return a;
-  return say(a, pickWith(linesOf(a), noise(env.seed, a.i, env.tick, S.line)), env);
+  const text = pickLine(a, env);
+  return text ? { ...say(a, text, env), recent: [...(a.recent ?? []), text].slice(-RECENT) } : a;
+}
+
+/** The pools someone draws a line from right now, with weights. */
+function poolsFor(a, env) {
+  if (a.kind === 'animal') return [[linesOf(a), 1]];
+  const pools = [[linesOf(a), a.kind === 'vehicle' ? 3 : 4]];
+  if (a.kind === 'vehicle') {
+    if (a.state === 'drive' && (env.ahead.get(a.i)?.gap ?? Infinity) < FOLLOW_GAP + 2) pools.push([HONKS, 6]);
+    pools.push([ANYTIME, 1]);
+  } else {
+    pools.push([ANYTIME, 2], [BY_HOUR[partOfDay(env.hour)], 3]);
+    const here = a.state === 'stay' ? a.target?.placeId : null;
+    const place = here?.startsWith('quanCoc') ? 'quanCoc' : here;
+    if (place && BY_PLACE[place]) pools.push([BY_PLACE[place], 4]);
+  }
+  const weather = env.weather === 'storm' ? 'rain' : env.weather;
+  if (BY_WEATHER[weather]) pools.push([BY_WEATHER[weather], 3]);
+  pools.push([MEMES, YOUNG_KINDS.has(a.kind) || a.castId === 'thanhNien' ? 3 : 0.4]);
+  return pools.filter(([list]) => list && list.length > 0);
+}
+
+/** Remember a line just said (so it is not said again soon). */
+const remember = (a, text) => ({ ...a, recent: [...(a.recent ?? []), text].slice(-RECENT) });
+
+/** An exchange neither of the two has just used, starting from the rolled one. */
+function freshPair(pairs, p, q, roll) {
+  const start = Math.floor(roll * pairs.length);
+  for (let k = 0; k < pairs.length; k += 1) {
+    const [opener, reply] = pairs[(start + k) % pairs.length];
+    if (!(p.recent ?? []).includes(opener) && !(q.recent ?? []).includes(reply)) return [opener, reply];
+  }
+  return pairs[start % pairs.length];
+}
+
+/** A line from the weighted pools, not one this person said lately. Deterministic. */
+function pickLine(a, env) {
+  const pools = poolsFor(a, env);
+  const total = pools.reduce((n, [, w]) => n + w, 0);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    let roll = noise(env.seed, a.i, env.tick, S.pool, attempt) * total;
+    const [list] = pools.find(([, w]) => (roll -= w) < 0) ?? pools[0];
+    const text = pickWith(list, noise(env.seed, a.i, env.tick, S.line, attempt));
+    if (!(a.recent ?? []).includes(text)) return text;
+  }
+  return null;
 }
 
 function updateAgent(a, env) {
@@ -188,7 +331,8 @@ function advance(a, env) {
 
 function leaveHome(a, env) {
   if (a.kind === 'keeper' && !isOpen(findPlace(a.workplace), env.hour)) return a; // nothing to open up yet
-  if (noise(env.seed, a.i, env.tick, S.exit) > 0.02) return a; // not everyone steps out at the same instant
+  if (env.t < a.until) return a; // home for a while (lunch, a rest, the rain)
+  if (noise(env.seed, a.i, env.tick, S.exit) > (rainy(env) && a.kind !== 'keeper' ? 0.003 : 0.02)) return a; // fewer go out in the rain
   return setOff(a, nextTarget(a, env));
 }
 
@@ -204,8 +348,10 @@ function walk(a, env) {
   const moved = advance(ready, env);
   if (moved.path.length === 0) return arrive(moved, env);
   if (a.kind === 'vendor' && !ready.target.home && noise(env.seed, a.i, env.tick, S.pause) < env.dt / 1000 / 14) {
-    return say({ ...moved, state: 'stay', until: env.t + 4000 + noise(env.seed, a.i, env.tick, S.stay) * 4000 },
-      pickWith(linesOf(a), noise(env.seed, a.i, env.tick, S.line)), env);
+    const fresh = linesOf(a).filter((l) => !(a.recent ?? []).slice(-1).includes(l));
+    const call = pickWith(fresh.length ? fresh : linesOf(a), noise(env.seed, a.i, env.tick, S.line));
+    return { ...say({ ...moved, state: 'stay', until: env.t + 4000 + noise(env.seed, a.i, env.tick, S.stay) * 4000 }, call, env),
+      recent: [...(a.recent ?? []), call].slice(-RECENT) };
   }
   return chatter(moved, env, a.kind === 'kid' ? 1 / 25 : 1 / 60);
 }
@@ -213,7 +359,11 @@ function walk(a, env) {
 function arrive(a, env) {
   const { target } = a;
   const exit = a.at === null ? { entry: target.entry, door: target.door } : null;
-  if (target.home) return { ...a, state: 'inside', target: null, path: [], bubble: null, exit };
+  if (target.home) {
+    const r = noise(env.seed, a.i, env.tick, S.stay, 2);
+    const rest = rainy(env) ? 90000 + r * 150000 : 30000 + r * 90000; // ms; it rains, they stay in longer
+    return { ...a, state: 'inside', target: null, path: [], bubble: null, exit, until: env.t + rest };
+  }
   if (a.kind === 'vendor') return setOff(a, nextTarget(a, env)); // on to the next corner of the xóm
   if (a.kind === 'keeper' && target.placeId === a.workplace) return { ...a, state: 'stay', until: Infinity, exit };
   const visit = (a.kind === 'kid' ? 10000 : 20000) + noise(env.seed, a.i, env.tick, S.stay) * 40000;
@@ -242,7 +392,12 @@ function nextTarget(a, env) {
   if (a.kind === 'vendor') return toNode(pickWith(ENTRIES, r(1)));
   if (a.kind === 'keeper') return isOpen(findPlace(a.workplace), env.hour) ? keeperTarget(a) : homeTarget(a);
   const here = a.target?.placeId;
-  const likes = a.kind === 'walker' || a.kind === 'kid' || a.kind === 'guest' ? [...a.likes, ...QUAN_COC] : a.likes;
+  if (a.kind === 'walker' || a.kind === 'kid') { // now and then home: for lunch, out of the rain, for a rest
+    const lunch = env.hour >= 11 && env.hour < 13.5;
+    if (r(7) < (rainy(env) ? 0.6 : lunch ? 0.3 : 0.1)) return homeTarget(a);
+  }
+  const hot = env.weather === 'hot' ? ['ao', 'ao', 'che', 'traDa'] : [];
+  const likes = a.kind === 'walker' || a.kind === 'kid' || a.kind === 'guest' ? [...a.likes, ...QUAN_COC, ...hot] : a.likes;
   const options = likes.map(findPlace).filter((p) => p && p.id !== here && isOpen(p, env.hour));
   if (options.length === 0 || r(2) < 0.15) return toNode(Math.floor(r(3) * NODES.length) % NODES.length);
   return claimSpot(pickWith(options, r(5)), a, env);
@@ -261,23 +416,31 @@ function claimSpot(placeTo, a, env) {
 // ---------------- vehicles and animals ----------------
 
 function drive(a, env) {
-  const night = !(env.hour >= 5.5 && env.hour < 22);
+  if (a.state === 'bump') return env.t >= a.until ? { ...a, state: 'drive', chatCooldown: env.t + CHAT_COOLDOWN_MS } : a;
   if (a.state === 'away') {
     if (env.t < a.until) return a;
+    if (!onTheRoad(a, env.hour)) return { ...a, until: env.t + 20000 + noise(env.seed, a.i, env.tick, S.away) * 20000 }; // not now
     const dir = noise(env.seed, a.i, env.tick, S.dir) < 0.5 ? 1 : -1;
-    return { ...a, state: 'drive', dir, ...ride(dir > 0 ? 0 : ROAD_LENGTH, dir) };
+    const lane = `${dir}:${Math.round((a.sub ?? 0) / SUB_LANE)}`;
+    const room = env.ahead.get(`entry:${lane}`) ?? Infinity;
+    if (room < a.size * 1.2 || env.entering.has(lane)) return { ...a, until: env.t + 1500 }; // no room at the edge yet
+    env.entering.add(lane); // this step's scratch set: one rider comes in per lane per step
+    return { ...a, state: 'drive', dir, ...ride(dir > 0 ? 0 : ROAD_LENGTH, dir, a.sub) };
   }
-  const s = a.s + a.dir * a.speed * (env.dt / 1000);
+  // Keep a gap to the rider in front (the hasty ones cut it fine): a queue forms when the road is full.
+  const gap = env.ahead.get(a.i)?.gap ?? Infinity;
+  const keep = a.hasty ? 0 : FOLLOW_GAP;
+  const pace = Math.max(0, Math.min(1, (gap - keep) / FOLLOW_SPAN));
+  const s = a.s + a.dir * a.speed * pace * (env.dt / 1000);
   if (s < 0 || s > ROAD_LENGTH) {
     const r = noise(env.seed, a.i, env.tick, S.away);
-    // Most riders call it a day at night and come back after dawn; a few night owls keep going.
-    const wait = night && r < 0.85 ? msUntil(5.5 + r, env.hour, env.rate) : 5000 + r * 20000;
-    return { ...a, state: 'away', ...ride(Math.max(0, Math.min(ROAD_LENGTH, s)), a.dir), until: env.t + wait, bubble: null };
+    const wait = onTheRoad(a, env.hour) ? 3000 + r * 15000 : 20000 + r * 20000;
+    return { ...a, state: 'away', ...ride(Math.max(0, Math.min(ROAD_LENGTH, s)), a.dir, a.sub), until: env.t + wait, bubble: null };
   }
-  return chatter({ ...a, ...ride(s, a.dir), phase: a.phase + (env.dt / 1000) * (4 + a.speed / 4) }, env, 1 / 40);
+  const moving = pace > 0.05;
+  return chatter({ ...a, ...ride(s, a.dir, a.sub), phase: a.phase + (moving ? (env.dt / 1000) * (4 + a.speed / 4) : 0) }, env, moving ? 1 / 40 : 1 / 12);
 }
 
-const msUntil = (hour, now, rate) => ((((hour - now) % 24) + 24) % 24) * 60 * 1000 / rate;
 
 function potter(a, env) {
   const night = env.hour >= 21.5 || env.hour < 5.5;
@@ -337,11 +500,11 @@ function meet(agents, env) {
       if (chatting.has(p.i) || chatting.has(q.i) || Math.hypot(p.x - q.x, p.y - q.y) > CHAT_RANGE) continue;
       if (noise(env.seed, p.i, q.i, env.tick, S.meet) >= CHAT_CHANCE) continue;
       const angry = noise(env.seed, p.i, q.i, env.tick, S.quarrel) < 0.25; // they bumped into each other
-      const [opener, reply] = pickWith(angry ? QUARRELS : GREETINGS, noise(env.seed, p.i, q.i, env.tick, S.greet));
+      const [opener, reply] = freshPair(angry ? ALL_QUARRELS : ALL_GREETINGS, p, q, noise(env.seed, p.i, q.i, env.tick, S.greet));
       const until = env.t + (angry ? 5000 : 3500) + noise(env.seed, q.i, p.i, env.tick, S.stay) * 2500;
       const face = Math.sign(q.x - p.x) || 1;
-      chatting.set(p.i, say({ ...p, state: 'chat', chatWith: q.i, until, dir: face }, opener, env, 0, angry ? 2800 : 2200, angry));
-      chatting.set(q.i, say({ ...q, state: 'chat', chatWith: p.i, until, dir: -face }, reply, env, 1500, angry ? 2800 : 2200, angry));
+      chatting.set(p.i, remember(say({ ...p, state: 'chat', chatWith: q.i, until, dir: face }, opener, env, 0, angry ? 2800 : 2200, angry), opener));
+      chatting.set(q.i, remember(say({ ...q, state: 'chat', chatWith: p.i, until, dir: -face }, reply, env, 1500, angry ? 2800 : 2200, angry), reply));
     }
   }
   return chatting.size === 0 ? agents : agents.map((a) => chatting.get(a.i) ?? a);

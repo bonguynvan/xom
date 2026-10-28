@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createLive } from './live.js';
+import { createWeather } from './weather.js';
 
 const ROOT = resolve(fileURLToPath(new URL('../public', import.meta.url)));
 const BODY_LIMIT = 2048;
@@ -104,10 +105,13 @@ export const handler = createHandler();
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const PORT = Number(process.env.PORT) || 3500;
   const HOST = process.env.HOST || '127.0.0.1';
-  const live = createLive({ token: process.env.OPS_TOKEN ?? '', file: process.env.STATS_FILE || null });
+  let live = null;
+  const weather = createWeather({ onChange: () => live?.weatherChanged() });
+  live = createLive({ token: process.env.OPS_TOKEN ?? '', file: process.env.STATS_FILE || null, weather: weather.get });
+  if (process.env.WEATHER !== 'off') weather.start();
   const server = createServer(createHandler({ live, trustProxy: process.env.TRUST_PROXY === '1' }));
   server.listen(PORT, HOST, () => console.log(`Xóm Peti: http://${HOST}:${PORT}${live.opsOn ? ' (ops on)' : ''}`));
-  const stop = () => { live.close(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); };
+  const stop = () => { weather.stop(); live.close(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
 }

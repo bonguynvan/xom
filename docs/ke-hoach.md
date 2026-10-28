@@ -1,4 +1,4 @@
-# Kế hoạch đợt tới: thời tiết, nhịp ngày đêm, giờ cao điểm, câu thoại
+# Kế hoạch đợt tới: thời tiết, nhịp ngày đêm, giờ cao điểm, câu thoại (đã làm xong, 2026-10-28)
 
 Thứ tự đề xuất: từ nhẹ nhất (chỉ là chữ) đến nặng nhất (gọi API thời tiết). Mỗi bước làm xong là deploy được ngay.
 

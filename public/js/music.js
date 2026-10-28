@@ -92,6 +92,13 @@ function synth(ac, out) {
   };
 }
 
+/** Rain on the roof in the music when it rains in the xóm; the drums keep their heads down. */
+function withWeather(mood, weather) {
+  if (weather === 'rain' || weather === 'storm') return { ...mood, rain: Math.max(mood.rain, weather === 'storm' ? 0.95 : 0.75), drums: mood.drums * 0.5 };
+  if (weather === 'hot') return { ...mood, brightness: mood.brightness + 600 };
+  return mood;
+}
+
 /** A looping bed of filtered noise (vinyl or rain) whose level can be eased. */
 function bed(ac, out, buffer, filterType, freq) {
   const src = ac.createBufferSource();
@@ -119,7 +126,7 @@ function vinylBuffer(ac) {
  * The music player. `hourOf()` gives the xóm's hour, `seed` makes each day's melody its own.
  * start() must be called from a click (browsers allow sound only then).
  */
-export function createMusic({ hourOf, seed = 1 }) {
+export function createMusic({ hourOf, seed = 1, weatherOf = () => 'clear' }) {
   let ac = null;
   let track = null;
   let timer = 0;
@@ -165,7 +172,7 @@ export function createMusic({ hourOf, seed = 1 }) {
     resync = () => { next = ac.currentTime + 0.1; };
     let index = 0;
     const schedule = () => {
-      const mood = moodAt(hourOf());
+      const mood = withWeather(moodAt(hourOf()), weatherOf());
       tape.frequency.setTargetAtTime(mood.brightness, ac.currentTime, 2);
       rain.gain.setTargetAtTime(mood.rain * 0.18, ac.currentTime, 3);
       while (next < ac.currentTime + LOOKAHEAD_S) {

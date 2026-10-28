@@ -6,6 +6,7 @@
 // gets a character with a name of its choosing that every page draws, until the page is closed.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { cleanName, lookById } from '../public/js/guests.js';
+import { KINDS } from './weather.js';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 
 export const OPS_TOKEN_MIN = 32;
@@ -27,7 +28,7 @@ const digest = (value) => createHash('sha256').update(String(value)).digest();
 export const ipKey = (ip) => (ip.includes(':') && !ip.startsWith('::ffff:') ? ip.split(':').slice(0, 4).join(':') : ip.replace(/^::ffff:/, ''));
 
 /** The live-watchers hub. `file` (optional) keeps the daily tally across restarts. */
-export function createLive({ token = '', file = null, now = () => Date.now(), startedAt = now() } = {}) {
+export function createLive({ token = '', file = null, now = () => Date.now(), startedAt = now(), weather = () => ({ kind: 'clear', tempC: 28 }) } = {}) {
   const watchers = new Set();
   const perIp = new Map();
   const lastVisit = new Map(); // memory only, pruned; never written anywhere
@@ -35,7 +36,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
   const kicked = new Map(); // ip key -> until (memory only)
   let nextGuest = 1;
   const guests = () => [...watchers].filter((w) => w.guest).map((w) => w.guest);
-  let settings = { maintenance: false, announcement: null };
+  let settings = { maintenance: false, announcement: null, weather: 'auto' }; // weather: 'auto' (Hà Nội's) or a kind the admin forces
   let days = load(file);
 
   const today = () => {
@@ -44,7 +45,9 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
     return day;
   };
   const bump = (fn) => { const day = today(); days = days.map((d) => (d.day === day ? fn(d) : d)); };
-  const message = () => `data: ${JSON.stringify({ online: watchers.size, ...settings, guests: guests().map(({ id, name, look }) => ({ id, name, look })) })}\n\n`;
+  const sky = () => (settings.weather === 'auto' ? weather() : { ...weather(), kind: settings.weather });
+  const message = () => `data: ${JSON.stringify({ online: watchers.size, maintenance: settings.maintenance, announcement: settings.announcement,
+    weather: sky(), guests: guests().map(({ id, name, look }) => ({ id, name, look })) })}\n\n`;
   const send = (w, text) => { if (w.res.writableLength > SLOW_CLIENT_BYTES) w.res.destroy(); else w.res.write(text); };
   const broadcast = () => { const text = message(); for (const w of watchers) send(w, text); };
   let pending = null;
@@ -144,6 +147,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
       rooms: [],
       guests: guests().map(({ id, name, look, since }) => ({ id, name, look, minutes: Math.round((now() - since) / 60000) })),
       daily: padDays(days, now()),
+      weather: sky(),
       settings,
     };
   }
@@ -152,6 +156,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
   function updateSettings(input) {
     const next = { ...settings };
     if (typeof input.maintenance === 'boolean') next.maintenance = input.maintenance;
+    if (input.weather === 'auto' || KINDS.includes(input.weather)) next.weather = input.weather;
     if ('announcement' in input) {
       const text = typeof input.announcement === 'string' ? input.announcement.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, ANNOUNCE_MAX) : '';
       next.announcement = text || null;
@@ -169,7 +174,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
     for (const w of watchers) w.res.end();
   };
 
-  return { watch, join, leave, kick, overview, updateSettings, authorized, opsOn, close, online: () => watchers.size, guestCount: () => guests().length };
+  return { watch, join, leave, kick, overview, updateSettings, authorized, opsOn, close, weatherChanged: soon, online: () => watchers.size, guestCount: () => guests().length };
 }
 
 /** The last 30 days, one entry each, zeros for the days nobody came. */

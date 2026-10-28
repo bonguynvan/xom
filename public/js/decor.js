@@ -59,7 +59,9 @@ const doorThings = PLACES.filter((p) => p.kind === 'house' && p.door.y > p.front
 
 /** Bamboo trays of goods (and conical hats) on the market floor, between the stalls. */
 const market = findPlace('cho');
-const trays = Array.from({ length: 16 }, (_, k) => ({ x: market.x + 14 + noise(k, 111) * (market.w - 28), y: market.y0 + 18 + noise(k, 112) * (market.y1 - market.y0 - 30), k }));
+/** Where the floor sellers sit with their trays (between the stalls, off the aisles). */
+export const TRAYS = Array.from({ length: 28 }, (_, k) => ({ x: market.x + 14 + noise(k, 111) * (market.w - 28), y: market.y0 + 18 + noise(k, 112) * (market.y1 - market.y0 - 30), k }));
+const trays = TRAYS;
 function tray(ctx, t, open) {
   shape(ctx, '#d9b25f', () => ctx.ellipse(t.x, t.y, 7, 3, 0, 0, Math.PI * 2), 0.5);
   if (!open) return;

@@ -14,6 +14,15 @@ Chủ yếu để xem. Kéo để nhìn quanh xóm, lăn chuột (hoặc chụm 
 vài giây thì camera tự đi dạo. Xóm chạy theo giờ thật Việt Nam (UTC+7); thêm `?tua=60` vào địa chỉ để
 tua nhanh (một phút trong xóm mỗi giây). Mỗi ngày một "hạt giống" ngẫu nhiên mới.
 
+## Ngày đêm, giao thông, thời tiết
+
+- Càng về tối càng vắng; đêm có gánh bánh giò, bánh mì đêm, xôi khuya.
+- Giờ đi làm (7–8 giờ) và tan tầm (17–18 giờ) đường kín xe máy, tự tắc đường; thỉnh thoảng có vụ quệt xe, hai bên
+  dừng lại cãi nhau (chỉ là hình ảnh).
+- Thời tiết lấy theo trời Hà Nội (Open-Meteo, 15 phút một lần, ai cũng thấy cùng một trời): mưa thì vắng người,
+  nắng to thì trẻ con ra tắm ao, rét thì ít người ngồi quán. Admin ép được thời tiết để livestream.
+- Câu thoại: vài trăm câu theo giờ, theo chỗ, theo thời tiết, cả câu cửa miệng cũ lẫn mới; không ai nói lặp lại.
+
 ## Nhạc
 
 Bấm 🎵 để nghe lofi "mùa thu Hà Nội" tự sáng tác ngay trong trình duyệt (Web Audio, không dùng bản thu nào nên không vướng bản quyền): piano điện, bass, trống nhẹ, giai điệu ngũ cung kiểu đàn bầu, tiếng đĩa than; tối có mưa, khuya có dế. Nhạc đổi theo giờ trong xóm. Muốn dùng bản nhạc khác, bỏ file `public/music/lofi.mp3` vào (nhạc bạn có quyền dùng) là trang phát file đó thay thế.

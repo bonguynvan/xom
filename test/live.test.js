@@ -163,3 +163,17 @@ test('leaving, the per-address cap, and the admin sending a guest away', async (
   assert.equal((await post(base, '/api/join', { sid: pages[3].sid, name: 'Quay lại', look: 'aoDai' })).status, 403, 'that address waits a while');
   pages.forEach((p) => p.close());
 });
+
+test('pages get the weather; the admin can force it and give it back to the sky', async (t) => {
+  const { live, base } = await start(t);
+  const w = await watch(base);
+  assert.deepEqual(w.data.weather, { kind: 'clear', tempC: 28 });
+  const set = (weather) => post(base, '/api/ops/settings', { weather }, { Authorization: `Bearer ${TOKEN}` });
+  assert.equal((await set('storm')).status, 200);
+  assert.equal((await nextState(w)).weather.kind, 'storm');
+  await set('tornado');
+  assert.equal(live.overview().settings.weather, 'storm', 'unknown kinds are ignored');
+  await set('auto');
+  assert.equal(live.overview().weather.kind, 'clear');
+  w.close();
+});
