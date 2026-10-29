@@ -200,3 +200,19 @@ body {
   .splash-dots i { animation: none; }
   .loa-text { animation: none; padding-left: 8px; white-space: normal; }
 }
+
+/* ---------- ?live=1: the page as a livestream source (OBS, YouTube) ---------- */
+.live-tag { display: none; }
+.live .online, .live .join, .live .find, .live .music, .live .github, .live .hint { display: none !important; }
+.live .brand { font-size: 2rem; }
+.live .brand-mark { width: 38px; height: 38px; }
+.live .clock { margin-left: auto; padding: 6px 20px; font-size: 1.9rem; }
+.live .loa { top: 16px; left: 16px; max-width: min(900px, calc(100% - 32px)); }
+.live .loa-tag { padding: 8px 14px; font-size: 1.15rem; }
+.live .loa-text { font-size: 1.35rem; }
+.live #street { cursor: default; }
+.live .live-tag {
+  display: block; position: absolute; right: 16px; bottom: 16px; z-index: 2; margin: 0;
+  padding: 6px 18px; border: var(--border); border-radius: 999px; background: var(--paper); box-shadow: var(--shadow-sm);
+  font: 800 1.35rem var(--font-display); color: var(--ink); pointer-events: none;
+}
