@@ -5,6 +5,7 @@ import { hourOf } from './map.js';
 import { renderFrame } from './render.js';
 import { GUEST_LOOKS, cleanName, randomName } from './guests.js';
 import { createMusic } from './music.js';
+import { isLiveMode } from './live-mode.js';
 import { STEP_MS, createWorld, setWeather, stepWorld, syncGuests } from './world.js';
 
 const MAX_STEPS_PER_FRAME = 40; // only guards a slow frame
@@ -13,6 +14,9 @@ const IDLE_BEFORE_DRIFT_MS = 6000;
 const KEY_PAN = 60; // css px per arrow press
 
 const $ = (id) => document.getElementById(id);
+// ?live=1: a livestream source (OBS). CSS hides the buttons and enlarges the clock and loudspeaker.
+const LIVE = isLiveMode(location.search);
+if (LIVE) document.body.classList.add('live');
 const canvas = $('street');
 const ctx = canvas.getContext('2d', { alpha: false });
 const makeCanvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }); // building bitmaps
@@ -323,8 +327,7 @@ $('join-form').addEventListener('submit', async (event) => {
 // ---------------- music: lofi made in the browser, following the xóm's hour ----------------
 
 const music = createMusic({ hourOf: () => hourOf(state.world.minute), seed: daySeed(), weatherOf: () => state.world.weather?.kind ?? 'clear' });
-$('music').addEventListener('click', async () => {
-  const on = !music.playing;
+async function setMusic(on) {
   $('music').setAttribute('aria-pressed', String(on));
   $('music').textContent = on ? '🎵 Tắt nhạc' : '🎵 Bật nhạc';
   try {
@@ -332,7 +335,14 @@ $('music').addEventListener('click', async () => {
   } catch {
     $('music').textContent = '🎵 Không phát được nhạc';
   }
-});
+}
+$('music').addEventListener('click', () => setMusic(!music.playing));
+if (LIVE) {
+  // A livestream plays music without anyone there to click. OBS allows that; a normal browser holds the
+  // sound back until the first click or tap, which then lets it out.
+  setMusic(true);
+  document.addEventListener('pointerdown', () => music.unlock(), { once: true });
+}
 
 if (window.matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Kéo để xem quanh xóm · chụm hai ngón để phóng to';
 

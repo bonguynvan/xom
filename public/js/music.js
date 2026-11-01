@@ -221,6 +221,12 @@ export function createMusic({ hourOf, seed = 1, weatherOf = () => 'clear' }) {
       timer = setInterval(tick, TICK_MS);
       tick();
     },
+    /** After a click or tap: let the sound out if the browser held it back (it blocks autoplay). */
+    unlock() {
+      if (!playing) return;
+      if (ac?.state === 'suspended') ac.resume();
+      if (track?.paused) track.play().catch(() => {});
+    },
     stop() {
       playing = false;
       track?.pause();

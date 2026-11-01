@@ -27,6 +27,19 @@ tua nhanh (một phút trong xóm mỗi giây). Mỗi ngày một "hạt giống
 
 Bấm 🎵 để nghe lofi "mùa thu Hà Nội" tự sáng tác ngay trong trình duyệt (Web Audio, không dùng bản thu nào nên không vướng bản quyền): piano điện, bass, trống nhẹ, giai điệu ngũ cung kiểu đàn bầu, tiếng đĩa than; tối có mưa, khuya có dế. Nhạc đổi theo giờ trong xóm. Muốn dùng bản nhạc khác, bỏ file `public/music/lofi.mp3` vào (nhạc bạn có quyền dùng) là trang phát file đó thay thế.
 
+## Livestream (YouTube, Facebook…)
+
+Mở **https://xom.peti.vn/?live=1**: không có nút bấm, đồng hồ và loa phường to hơn, góc dưới ghi `xom.peti.vn`,
+camera tự đi dạo, nhạc tự bật (nhạc tự sáng tác nên không bị bắt bản quyền).
+
+1. OBS Studio → thêm **Browser Source**: URL `https://xom.peti.vn/?live=1`, 1920×1080, 30 FPS,
+   tick "Control audio via OBS", bỏ tick "Shutdown source when not visible".
+2. YouTube Studio → Phát trực tiếp → copy khóa luồng → OBS: Settings → Stream → YouTube, dán khóa.
+   Output 1080p30, 4500–6000 kbps, keyframe 2 giây.
+3. Đừng phát từ máy chủ đang chạy các game: mã hóa video tốn 1–2 nhân CPU.
+
+Trên trình duyệt thường (không phải OBS), nhạc chỉ phát sau lần bấm đầu tiên vào trang.
+
 ## Chạy trên máy
 
 ```bash
