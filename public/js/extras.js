@@ -128,31 +128,32 @@ export function extrasAt(extras, hour, t, weather = 'clear') {
   const exercise = exerciseBusy(hour) * (wet ? 0 : 1);
   const yard = yardBusy(hour) * (wet ? 0 : 1);
   const out = [];
-  for (const e of extras) {
+  for (const [n, e] of extras.entries()) {
+    const push = (o) => out.push({ ...o, n }); // n: which extra this is, so a 3D renderer can follow one person
     const busy = { sit: stools, play, seller: sellers, swim, shop: market, pupil, wait, exercise, yard }[e.kind];
     if (e.rank >= busy) continue;
     if (e.kind === 'seller') {
-      out.push({ x: e.x, y: e.y, moving: false, agent: pose(e.cast, e.dir, 0) });
+      push({ x: e.x, y: e.y, moving: false, agent: pose(e.cast, e.dir, 0) });
       continue;
     }
-    if (e.kind === 'swim') { // bobbing and paddling: only head and shoulders above the water (render.js hides the rest)
+    if (e.kind === 'swim') { // bobbing and paddling: only head and shoulders above the water
       const s = (t / 1000) * e.speed + e.phase;
-      out.push({ x: e.bx + Math.sin(s * 0.4) * 10, y: e.by + Math.cos(s * 0.3) * 4, moving: true, swim: Math.sin(s * 2.2) * 1.2,
+      push({ x: e.bx + Math.sin(s * 0.4) * 10, y: e.by + Math.cos(s * 0.3) * 4, moving: true, swim: Math.sin(s * 2.2) * 1.2,
         agent: pose(e.cast, Math.cos(s * 0.4) >= 0 ? 1 : -1, s * 4) });
       continue;
     }
     if (e.kind === 'exercise') { // everybody in step, arms and legs going, facing the same way
-      out.push({ x: e.x, y: e.y, moving: true, agent: pose(e.cast, 1, (t / 1000) * 2.4 + e.phase) });
+      push({ x: e.x, y: e.y, moving: true, agent: pose(e.cast, 1, (t / 1000) * 2.4 + e.phase) });
       continue;
     }
     if (e.kind === 'sit' || e.kind === 'wait') {
-      out.push({ x: e.x, y: e.y, moving: false, agent: pose(e.cast, e.dir, 0) });
+      push({ x: e.x, y: e.y, moving: false, sit: e.kind === 'sit', agent: pose(e.cast, e.dir, 0) });
       continue;
     }
     const s = (t / 1000) * e.speed * 0.6 + e.phase; // shuffling between the stalls, or chasing the ball
     const dx = Math.sin(s) * (e.kind === 'play' ? 30 : e.kind === 'pupil' ? 10 : 14);
     const moving = Math.abs(Math.cos(s)) > 0.35;
-    out.push({ x: e.bx + dx, y: e.by + Math.cos(s * 0.7) * 4, moving, agent: pose(e.cast, Math.cos(s) >= 0 ? 1 : -1, (t / 1000) * 7 + e.phase) });
+    push({ x: e.bx + dx, y: e.by + Math.cos(s * 0.7) * 4, moving, agent: pose(e.cast, Math.cos(s) >= 0 ? 1 : -1, (t / 1000) * 7 + e.phase) });
   }
   return out;
 }

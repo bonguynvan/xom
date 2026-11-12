@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CAST } from '../public/js/cast.js';
-import { CIVIC } from '../public/js/civic.js';
 import { clinicBusy, exerciseBusy, extrasAt, extrasFrom, schoolBusy, yardBusy } from '../public/js/extras.js';
 import { NODES } from '../public/js/map.js';
 import { PLACES, findPlace } from '../public/js/places.js';
@@ -13,7 +12,6 @@ test('the school, the clinic and the ward office stand where houses would have b
   const civic = PLACES.filter((p) => p.civic);
   assert.deepEqual(civic.map((p) => p.id).sort(), ['tramYTe', 'truong', 'uyBan']);
   for (const p of civic) {
-    assert.equal(typeof CIVIC[p.kind], 'function', `${p.id} has a facade`);
     assert.ok(NODES[p.entry], `${p.id} opens onto the ways`);
     assert.ok(p.spots.length >= 3, `${p.id} has room for visitors`);
     for (const h of PLACES.filter((q) => q.kind === 'house')) assert.ok(!overlaps(box(p), box(h)), `${p.id} overlaps ${h.id}`);

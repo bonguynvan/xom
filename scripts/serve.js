@@ -16,6 +16,7 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8',
   '.mp3': 'audio/mpeg', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+  '.glb': 'model/gltf-binary',
 };
 
 export const HEADERS = {
@@ -75,9 +76,9 @@ export function createHandler({ live = createLive(), trustProxy = false } = {}) 
     const path = (req.url ?? '/').split('?')[0];
     if (path === '/healthz') return send(res, 200, { ok: true });
     if (path === '/api/live' && req.method === 'GET') return live.watch(req, res, clientIp(req, trustProxy));
-    if ((path === '/api/join' || path === '/api/leave') && req.method === 'POST') {
+    if ((path === '/api/join' || path === '/api/leave' || path === '/api/move') && req.method === 'POST') {
       const input = await readJson(req);
-      const { status, body } = path === '/api/join' ? live.join(input) : live.leave(input);
+      const { status, body } = path === '/api/join' ? live.join(input) : path === '/api/move' ? live.move(input) : live.leave(input);
       return send(res, status, body);
     }
     if (path.startsWith('/api/ops/')) {
@@ -95,6 +96,7 @@ export function createHandler({ live = createLive(), trustProxy = false } = {}) 
     }
     if (path.startsWith('/api/')) return send(res, 404, { error: 'Không có' });
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, '', 'text/plain', { Allow: 'GET, HEAD' });
+    if (path === '/3d.html') return send(res, 301, '', 'text/plain', { Location: '/' }); // the 3D page is the home page now
     return serveFile(req, res);
   };
   return handler;
