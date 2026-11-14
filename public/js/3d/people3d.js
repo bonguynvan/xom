@@ -1,5 +1,5 @@
 // The people of the 3D xóm. The simulation (world.js) still decides where everyone is; this file only shows
-// them. The ~60 people nearest the camera are real skinned characters (glTF, Mixamo rigs) that walk, run and
+// them. The ~60 people nearest the camera are real skinned characters (glTF: Remy and Nathan) that walk, run and
 // stand idle, each tinted by their own colour, some with a nón lá or a đòn gánh on the shoulder; everybody
 // further away is a cheap instanced figure. Speech bubbles and name tags are HTML over the canvas.
 import * as THREE from '../vendor/three/three.module.min.js';
@@ -10,11 +10,12 @@ import { MID_REACH, cellOf, ridePose, sidestep, talkPose, tierOf } from './crowd
 import { swing, waveArm } from './gesture.js';
 import { createImpostors } from './impostor.js';
 import { STOOL_TOP } from './interact.js';
+import { CLIP } from './locomotion.js';
 import { walker } from './models.js';
+import { MIXAMO, RENDERPEOPLE, adoptSkeleton, borrowClip } from './retarget.js';
 import { surfaceY } from './terrain.js';
 
 const PEOPLE = new Set(['keeper', 'walker', 'kid', 'vendor', 'guest']);
-const FEMALE = new Set(['aoDai', 'coToc', 'coTapHoa', 'baTraDa', 'baPho', 'ganhHang', 'baTrau', 'coGiao', 'chiEm', 'hocSinhNu']);
 const HAT = new Set(['aoDai', 'ganhHang', 'nongDan', 'baTrau', 'baTraDa', 'coTapHoa']);
 const SIDE_STEPPERS = new Set(['keeper', 'walker', 'kid', 'vendor', 'guest']);
 const visible = (a) => a.state !== 'inside' && a.state !== 'away' && a.state !== 'gone';
@@ -23,41 +24,54 @@ const NEAR_MAX = 30; // how many at once (the pool is bigger so a change of rig 
 const SHADOW_MAX = 10;
 const NEAR_REACH = 24; // metres from the focus within which people are real skinned characters
 const NEAR_FROM = 45; // camera further than this from its focus (the overview): nobody is, they are a few pixels tall
-const SHADOW_REACH = 14; // skinned characters only cast a shadow this close (each one is 11-28 k triangles, drawn again for the shadow)
+const SHADOW_REACH = 14; // skinned characters only cast a shadow this close (each one is 22-31 k triangles, drawn again for the shadow)
 const FAR_MAX = 2200;
 const BROLLIES = 500;
 const hashOf = (key) => { let h = 7; for (let k = 0; k < key.length; k += 1) h = (h * 31 + key.charCodeAt(k)) >>> 0; return h; };
+const TOP_LIFT = 2.6; // Remy's top is charcoal: lifted to a mid grey so the person's colour shows on it
+const SHEET_HALF = { man: 0, youth: 1 }; // which half of the impostor sheet a rig is drawn in
 const WALK_SPEED = 1.35; // m/s the walk clip is made for
 const RUN_SPEED = 3.6;
 
-/** Load the two rigs and give the woman the man's walk, run and idle (same Mixamo skeleton, rotations only). */
+/** In a character with a material for its top (Remy's `Topmat`) only that takes the person's colour; else everything does. */
+export const tintable = (materials) => { const tops = materials.filter((m) => /top/i.test(m.mat.name)); return tops.length ? tops : materials; };
+
+/**
+ * Load the characters and the clips they all play. `clips.glb` is a Mixamo skeleton with nothing on it and
+ * the idle, walk and run; each character's own skeleton is converted to it (retarget.js). Remy is the man;
+ * the young man (`nathan.glb`, a Renderpeople scan) is there only if his file is. Returns { man, youth? }.
+ */
 export async function loadRigs(base = '/models/') {
   const loader = new GLTFLoader();
-  const [man, woman] = await Promise.all([loader.loadAsync(`${base}soldier.glb`), loader.loadAsync(`${base}michelle.glb`)]);
-  // The soldier model faces -Z, Michelle +Z (their toes say so): turn him round, or every man walks backwards.
-  man.scene.children[0].quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
-  const clips = Object.fromEntries(['Idle', 'Walk', 'Run'].map((n) => [n.toLowerCase(), man.animations.find((c) => c.name === n)]));
-  const rotationsOnly = (clip) => {
-    const c = clip.clone();
-    c.tracks = c.tracks.filter((t) => t.name.endsWith('.quaternion') && !/Hips\.quaternion$/.test(t.name));
-    return c;
-  };
-  const rig = (gltf, own) => {
-    const box = new THREE.Box3().setFromObject(gltf.scene);
-    const height = box.max.y - box.min.y;
-    // culled like anything else, by a sphere round the T-pose made roomy enough for any stride or wave
+  const [moves, man, youth] = await Promise.all([loader.loadAsync(`${base}clips.glb`), loader.loadAsync(`${base}remy.glb`), loader.loadAsync(`${base}nathan.glb`).catch(() => null)]);
+  // The clips' skeleton faces -Z, the characters +Z (their toes say so): turn it round, or everybody walks backwards.
+  moves.scene.children[0].quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+  const clips = Object.fromEntries(['Idle', 'Walk', 'Run'].map((n) => [n.toLowerCase(), moves.animations.find((c) => c.name === n)]));
+  const rest = moves.animations.find((c) => c.name === 'TPose');
+  const rig = (gltf, map) => {
+    const fit = adoptSkeleton(gltf.scene, moves.scene, map, rest);
+    gltf.scene.updateMatrixWorld(true);
+    let tris = 0;
     gltf.scene.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
       o.receiveShadow = true;
-      if (o.isSkinnedMesh) { o.computeBoundingSphere(); o.boundingSphere.radius *= 1.5; }
+      if (o.material.transparent) { o.material.transparent = false; o.material.alphaTest = 0.5; o.material.depthWrite = true; } // hair cards: cut out, not blended
+      if (/top/i.test(o.material.name) && !o.material.userData.lifted) { o.material.color.multiplyScalar(TOP_LIFT); o.material.userData.lifted = true; }
+      // culled like anything else, by a sphere round the T-pose made roomy enough for any stride or wave
+      if (o.isSkinnedMesh) { o.computeBoundingBox(); o.computeBoundingSphere(); o.boundingSphere.radius *= 1.5; }
+      tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
     });
-    // stride: how far this rig's feet reach with these clips, per metre of height, against the soldier's (measured: 0.95 for Michelle)
-    let tris = 0;
-    gltf.scene.traverse((o) => { if (o.isMesh) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
-    return { scene: gltf.scene, height, tris, stride: own ? 1 : 0.95, clips: own ? clips : Object.fromEntries(Object.entries(clips).map(([k, c]) => [k, rotationsOnly(c)])) };
+    // every rig the height the clips were made for, whatever units its file came in (Remy arrives 3.7 m tall):
+    // hats and things carried are built in metres for a head and shoulders of that size
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const k = CLIP.height / (box.max.y - box.min.y);
+    for (const child of gltf.scene.children) { child.scale.multiplyScalar(k); child.position.multiplyScalar(k); }
+    gltf.scene.updateMatrixWorld(true);
+    // stride: how far this rig's feet reach with these clips, per metre of height, against the skeleton the clips were made on
+    return { scene: gltf.scene, height: CLIP.height, tris, stride: 1, clips: Object.fromEntries(Object.entries(clips).map(([k, c]) => [k, borrowClip(c, fit)])) };
   };
-  return { man: rig(man, true), woman: rig(woman, false) };
+  return { man: rig(man, MIXAMO), ...(youth ? { youth: rig(youth, RENDERPEOPLE) } : {}) };
 }
 
 const canopyGeo = new THREE.ConeGeometry(0.62, 0.22, 12, 1, true);
@@ -132,6 +146,7 @@ function makeSlot(rig, scene) {
     o.material = o.material.clone();
     materials.push({ mat: o.material, base: o.material.color.clone() });
   });
+  const tinted = tintable(materials);
   let head = null;
   let spine = null;
   let arm = null;
@@ -167,7 +182,7 @@ function makeSlot(rig, scene) {
   brolly.visible = false;
   cape.visible = false;
   root.add(brolly, cape);
-  return { rig, root, mixer, actions, materials, meshes, arm, fore, head, limbs, shadow: true, hat, pole, brolly, cape, gear: '', key: null, yaw: 0, weights: { idle: 1, walk: 0, run: 0 }, last: null };
+  return { rig, root, mixer, actions, materials: tinted, meshes, arm, fore, head, limbs, shadow: true, hat, pole, brolly, cape, gear: '', key: null, yaw: 0, weights: { idle: 1, walk: 0, run: 0 }, last: null };
 }
 
 /** `skinned` = how many neighbours at once are real characters (the quality tier's number). */
@@ -189,8 +204,10 @@ export function buildPeople(scene, rigs, overlay, { skinned = NEAR_MAX, budget =
       swing(shin, side, leg.shin);
     }
   };
+  /** Which rig someone is: the thanh niên and every other grown-up the young man, everybody else (the kids too) Remy. */
+  const rigKey = (p) => (rigs.youth && p.kind !== 'kid' && (p.painter === 'anhRadio' || hashOf(p.key) % 2 === 0) ? 'youth' : 'man');
   const slots = [];
-  for (let k = 0; k < SLOTS; k += 1) slots.push(makeSlot(k % 3 === 0 ? rigs.woman : rigs.man, scene));
+  for (let k = 0; k < SLOTS; k += 1) slots.push(makeSlot(k % 5 < 2 && rigs.youth ? rigs.youth : rigs.man, scene));
   const farGeo = walker();
   const far = new THREE.InstancedMesh(farGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), FAR_MAX);
   far.castShadow = true;
@@ -295,12 +312,11 @@ export function buildPeople(scene, rigs, overlay, { skinned = NEAR_MAX, budget =
     riding.clear();
     let near = list.filter((p) => p.swim === undefined && p.d < (p.ride ? Math.min(reach, 16) : reach))
       .sort((a, b) => a.d - b.d).slice(0, Math.min(NEAR_MAX, skinned));
-    // the characters are heavy (11-28 k triangles, drawn again for each shadow map near you): stop at the tier's budget
+    // the characters are heavy (22-31 k triangles, drawn again for each shadow map near you): stop at the tier's budget
     let spent = 0;
     for (let k = 0; k < near.length; k += 1) {
       const p = near[k];
-      const woman = FEMALE.has(p.painter) || (p.kind === 'kid' && p.key.length % 2 === 0);
-      spent += (woman ? rigs.woman.tris : rigs.man.tris) * (k < SHADOW_MAX && p.d < SHADOW_REACH ? 2.5 : 1);
+      spent += rigs[rigKey(p)].tris * (k < SHADOW_MAX && p.d < SHADOW_REACH ? 2.5 : 1);
       if (spent > budget && k >= 4) { near.length = k; break; }
     }
     near.forEach((p, k) => { p.rank = k; });
@@ -310,8 +326,8 @@ export function buildPeople(scene, rigs, overlay, { skinned = NEAR_MAX, budget =
     const taken = new Set(slots.filter((s) => s.key).map((s) => s.key));
     for (const p of near) {
       if (taken.has(p.key)) continue;
-      const female = FEMALE.has(p.painter) || (p.kind === 'kid' && p.key.length % 2 === 0);
-      const free = slots.find((s) => !s.key && (s.rig === (female ? rigs.woman : rigs.man))) ?? slots.find((s) => !s.key);
+      const mine = rigs[rigKey(p)];
+      const free = slots.find((s) => !s.key && s.rig === mine) ?? slots.find((s) => !s.key);
       if (!free) break;
       free.key = p.key;
       free.fresh = true;
@@ -407,10 +423,9 @@ export function buildPeople(scene, rigs, overlay, { skinned = NEAR_MAX, budget =
       if (tier === 'mid' && mid.count < mid.max) { // a picture of a real character, turned to the camera
         const tall = heightOf(p.kind === 'extra' ? 'walker' : p.kind, p.size);
         const toCamera = Math.atan2(camera.position.x - p.X, camera.position.z - p.Z);
-        const woman = FEMALE.has(p.painter) || (p.kind === 'kid' && p.key.length % 2 === 0);
         const moving = p.moving || p.speed > 0.3;
         const base = p.seat ? p.seat.y - 0.35 * tall : surfaceY(p.x, p.y);
-        mid.add(p.X, base, p.Z, tall, toCamera, cellOf(p.yaw, toCamera, clock * 1.7 + (hashOf(p.key) % 100) / 100, moving, woman), tint.set(p.color ?? '#ffffff').lerp(white, 0.62));
+        mid.add(p.X, base, p.Z, tall, toCamera, cellOf(p.yaw, toCamera, clock * 1.7 + (hashOf(p.key) % 100) / 100, moving, SHEET_HALF[rigKey(p)]), tint.set(p.color ?? '#ffffff').lerp(white, 0.62));
         blob(p.X, p.seat ? p.seat.y : base, p.Z, tall / 1.7);
         continue;
       }

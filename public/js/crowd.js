@@ -37,7 +37,7 @@ const KID_LINES = ['Đá bóng không?', 'Trốn tìm đi!', 'Ăn gian! Chơi l�
 const pick = (list, r) => list[Math.floor(r * list.length) % list.length];
 
 /** `adults` neighbours and `kids` children, homes spread over nha1..nha`homes`. */
-export function crowd(taken = new Set(), adults = 620, kids = 170, homes = 80) {
+export function crowd(taken = new Set(), adults = 300, kids = 130, homes = 80) {
   const used = new Set(taken);
   const people = [];
   for (let k = 0; people.length < adults && k < adults * 20; k += 1) {

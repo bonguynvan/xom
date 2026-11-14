@@ -4,7 +4,7 @@
 import { CAST, GREETINGS, LOA_PHUONG, QUARRELS, findCast } from './cast.js';
 import { lookById } from './guests.js';
 import { ANYTIME, BY_HOUR, BY_PLACE, BY_WEATHER, HONKS, MEMES, MORE_GREETINGS, MORE_QUARRELS, TRAFFIC_QUARRELS, partOfDay } from './lines.js';
-import { DAY, MAP, MINUTES_PER_SECOND, NODES, ROAD_LENGTH, SPEED, SPRITE, hourOf, nearestNode, nodesNear, onRoad, routeNodes } from './map.js';
+import { DAY, MAP, MINUTES_PER_SECOND, NODES, ROAD_HALF, ROAD_LENGTH, SPEED, SPRITE, hourOf, nearestNode, nodesNear, onRoad, roadAt, routeNodes } from './map.js';
 import { PLACES, QUAN_COC, findPlace, isOpen, keeperSpot } from './places.js';
 import { noise, pickWith, salt } from './rng.js';
 
@@ -18,6 +18,10 @@ const LANE = 8; // vehicles keep right: east-bound nearer the viewer
 const SUB_LANE = 5; // riders spread over a few sub-lanes on their side
 const FOLLOW_GAP = 5; // a rider slows when this close behind the one in front, and stops at about FOLLOW_GAP
 const FOLLOW_SPAN = 14;
+const AVOID_LOOK = 60; // a rider sees somebody standing in the road this far ahead (9 m)
+const AVOID_HALF = 3; // half a rider's width
+const AVOID_TURN = 16; // units a second a rider moves sideways to go round
+const OVER_CENTRE = 4; // how far over the middle of the road a rider will go to get round
 const BUMP_CHANCE = 0.012; // per step for two riders practically touching (only the hasty ones get that close)
 const RECENT = 6; // lines a person remembers saying, and will not say again soon
 const ALL_GREETINGS = [...GREETINGS, ...MORE_GREETINGS];
@@ -141,10 +145,43 @@ export function stepWorld(world, dt = STEP_MS) {
   const minute = world.minute + (dt / 1000) * rate;
   const tick = world.tick + 1;
   const env = { seed: world.seed, t, dt, tick, rate, hour: hourOf(minute), claims: claimedSpots(world.agents),
-    ahead: gapsAhead(world.agents), entering: new Set(), weather: world.weather?.kind ?? 'clear' };
+    ahead: gapsAhead(world.agents), entering: new Set(), weather: world.weather?.kind ?? 'clear', blocks: world.blocks ?? [] };
   // Agents decide one after another so two of them never grab the same stool in the same step.
   const agents = world.agents.map((a) => expireBubble(updateAgent(a, env), t));
   return { ...world, t, minute, tick, agents: bumps(meet(agents, env), env), broadcast: loudspeaker(world.broadcast, minute, env) };
+}
+
+/**
+ * People standing where the simulation cannot see them (the visitor walking the street): `blockers` =
+ * [{ x, y, r }] in map units. Riders steer round them and stop when they cannot. Pure; the same world back
+ * when nobody was and nobody is in the road.
+ */
+export function setBlockers(world, blockers = []) {
+  const blocks = blockers.map((b) => ({ ...roadAt(b), r: b.r ?? 2.5 })).filter((b) => Math.abs(b.side) < ROAD_HALF + b.r + AVOID_HALF);
+  return blocks.length === 0 && !(world.blocks?.length > 0) ? world : { ...world, blocks };
+}
+
+/**
+ * Somebody in a rider's way: how far sideways the rider wants to be (`dodge`, on top of the lane) and how
+ * much of the pace is left (`pace` 0..1: less the nearer they are while still in line, 0 when there is no way round).
+ */
+function steerRound(a, lane, blocks) {
+  let dodge = 0;
+  let pace = 1;
+  let near = Infinity;
+  const now = lane + (a.dodge ?? 0);
+  const [lo, hi] = a.dir > 0 ? [-OVER_CENTRE, ROAD_HALF - AVOID_HALF] : [-(ROAD_HALF - AVOID_HALF), OVER_CENTRE];
+  for (const b of blocks) {
+    const ahead = (b.s - a.s) * a.dir;
+    const d = ahead - a.size * 0.45 - b.r; // free road up to them
+    if (ahead < -a.size || d > AVOID_LOOK) continue; // behind me, or too far to matter
+    const need = b.r + AVOID_HALF + 1;
+    if (Math.abs(lane - b.side) >= need && Math.abs(now - b.side) >= need) continue; // not in my way
+    const ways = [b.side + need, b.side - need].filter((side) => side >= lo && side <= hi).sort((p, q) => Math.abs(p - now) - Math.abs(q - now));
+    if (d < near) { near = d; dodge = ways.length ? ways[0] - lane : 0; }
+    if (Math.abs(now - b.side) < need && ahead > 0) pace = Math.min(pace, Math.max(0, Math.min(1, (d - 2) / FOLLOW_SPAN))); // still in line: slow down, stop short
+  }
+  return { dodge, pace };
 }
 
 /** The xóm's weather (from the server): { kind: 'clear' | 'cloudy' | 'fog' | 'rain' | 'storm' | 'hot' | 'cold', tempC }. Pure. */
@@ -430,15 +467,21 @@ function drive(a, env) {
   // Keep a gap to the rider in front (the hasty ones cut it fine): a queue forms when the road is full.
   const gap = env.ahead.get(a.i)?.gap ?? Infinity;
   const keep = a.hasty ? 0 : FOLLOW_GAP;
-  const pace = Math.max(0, Math.min(1, (gap - keep) / FOLLOW_SPAN));
+  // Somebody standing in the road (the visitor): go round them, or stop when there is no way round.
+  const steering = env.blocks.length > 0 || (a.dodge ?? 0) !== 0;
+  const round = steering ? steerRound(a, (a.dir > 0 ? LANE : -LANE) + a.sub, env.blocks) : { dodge: 0, pace: 1 };
+  const turn = AVOID_TURN * (env.dt / 1000);
+  const dodge = steering ? (a.dodge ?? 0) + Math.max(-turn, Math.min(turn, round.dodge - (a.dodge ?? 0))) : 0;
+  const swerve = steering ? { dodge } : {};
+  const pace = Math.min(round.pace, Math.max(0, Math.min(1, (gap - keep) / FOLLOW_SPAN)));
   const s = a.s + a.dir * a.speed * pace * (env.dt / 1000);
   if (s < 0 || s > ROAD_LENGTH) {
     const r = noise(env.seed, a.i, env.tick, S.away);
     const wait = onTheRoad(a, env.hour) ? 3000 + r * 15000 : 20000 + r * 20000;
-    return { ...a, state: 'away', ...ride(Math.max(0, Math.min(ROAD_LENGTH, s)), a.dir, a.sub), until: env.t + wait, bubble: null };
+    return { ...a, state: 'away', ...ride(Math.max(0, Math.min(ROAD_LENGTH, s)), a.dir, a.sub), ...(steering ? { dodge: 0 } : {}), until: env.t + wait, bubble: null };
   }
   const moving = pace > 0.05;
-  return chatter({ ...a, ...ride(s, a.dir, a.sub), phase: a.phase + (moving ? (env.dt / 1000) * (4 + a.speed / 4) : 0) }, env, moving ? 1 / 40 : 1 / 12);
+  return chatter({ ...a, ...ride(s, a.dir, a.sub + dodge), ...swerve, phase: a.phase + (moving ? (env.dt / 1000) * (4 + a.speed / 4) : 0) }, env, moving ? 1 / 40 : 1 / 12);
 }
 
 

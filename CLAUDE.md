@@ -31,20 +31,24 @@ No dependencies, no build step.
   (`CIVIC_PLACES`) before the houses grow, so they stand where a few houses would have been.
 - Data-only street details: `street-life.js` (parked Cubs, pavement stool clusters, quán cóc, banner/gate x, bamboo
   hedge), `decor.js` (market trays), `greenery.js` (`groundIsFree`). The 3D modules build the meshes from them.
-- Crowd: `crowd.js` generates ~790 everyday neighbours and kids (simulated; half the kids are pupils, painter
+- Crowd: `crowd.js` generates ~430 everyday neighbours and kids (simulated; half the kids are pupils, painter
   `hocSinh`); `extras.js` is the background crowd (~700: pavement stools, market, kids on the bare ground, pond,
   pupils at the school gate at the bell, clinic patients, dawn exercises and the afternoon crowd in the đình yard)
   that is a pure function of the clock, not simulated. `meet()` uses a grid so a thousand walkers stay cheap.
-  The cast `painter` field is now a look key: `people3d.js` uses it for female model, hat, carrying pole.
-- Cost (measured): a simulation step is ~0.4 ms for ~1,280 agents.
+  The cast `painter` field is now a look key: `people3d.js` uses it for the hat and the carrying pole (there is no female model at the moment).
+- Cost (measured): a simulation step was ~0.4 ms for ~1,280 agents (there are ~540 since the crowd was thinned).
 - Talk: `lines.js` pools (any time, by part of day, by place, by weather, catchphrases, more greetings and
   quarrels, traffic quarrels, honks). `pickLine` draws from weighted pools and each agent remembers its last 6
   lines (`recent`) so it does not repeat; greetings and quarrels avoid recent lines too (`freshPair`).
 - Day and night: bedtimes spread from 19:00 (a few owls past midnight; `awake()` handles sleepAt > 24); people
   go home for a while (`until`) at lunch, in the rain, now and then; night vendors (`hours` in the cast) 19:30-1:30.
-- Traffic: ~200 riders (cast TRAFFIC) out by `trafficAt(hour)` (rush 7:30 and 17:30); sub-lanes; car-following on
+- Traffic: ~200 riders (cast TRAFFIC: 154 Cubs and only 12 bicycles) out by `trafficAt(hour)` (rush 7:30 and 17:30); sub-lanes; car-following on
   the previous step's positions (`gapsAhead`), so queues form; hasty riders get close and sometimes `bump`
   (both stop and quarrel, a star is drawn). Visual only.
+  The walking visitor blocks the road: `main3d.js` hands where you stand to `setBlockers(world, [{ x, y, r }])` (pure; `map.js`
+  `roadAt` is the inverse of `onRoad`) before each step, and `drive` steers riders round (`steerRound`: a sideways `dodge`
+  on top of the sub-lane, a little over the centre line at most) or stops them short when there is no way round. With no
+  blockers the world is untouched, so a seed still replays the same day. Each page's traffic is its own.
 - Weather: `scripts/weather.js` fetches Hà Nội from Open-Meteo every 15 min (server side; WEATHER=off disables);
   the admin can force a kind (settings.weather). Pages get it on /api/live and call `setWeather`: rain sends people
   home and thins the crowd, heat fills the pond with swimmers, rain drawn by `sky3d.js`, music adds rain.
@@ -63,9 +67,15 @@ No dependencies, no build step.
   collision (`boxGrid`, `collide`), `sunAt`, `darkAt` (tested).
 - Few draw calls: every wall/roof of one colour or material is one merged `Builder` geometry (`geom.js`); trees,
   stools, vehicles, riders, animals and far people are InstancedMesh. Textures are painted on canvas (`textures.js`).
-- People: the nearest (see the budget above) are skinned glTF slots (`people3d.js`, soldier + michelle; michelle borrows the soldier's
-  clips, rotations only, no Hips track), everyone else an instanced figure. `extrasAt` entries carry `n` so a
-  slot can follow one extra. Bubbles are HTML positioned via CSSOM.
+- People: the nearest (see the budget below) are skinned glTF slots (`people3d.js`), everyone else an instanced figure.
+  Two characters, both men: `remy.glb` (Mixamo's Remy, rig `man`) and `nathan.glb` (a Renderpeople scan, rig `youth`,
+  optional: the page falls back to Remy when the file is missing; its licence is not cleared for the public repo).
+  Both are made from FBX with `scripts/fbx-to-glb.py` (Blender). Neither file has clips: everybody plays the idle, walk
+  and run in `clips.glb` (the old soldier's Mixamo skeleton with nothing on it). `retarget.js` (tested) makes that work
+  on any skeleton: `adoptSkeleton` renames each bone after its counterpart and gives it that bone's axes, skin untouched;
+  `borrowClip` copies the rotations and scales the hips' rise. `loadRigs` also brings every rig to one height and lifts
+  Remy's dark top so the person's colour shows (`tintable`: only a material named "top" is tinted when there is one).
+  `extrasAt` entries carry `n` so a slot can follow one extra. Bubbles are HTML positioned via CSSOM.
 - glb files must have no embedded images (GLTFLoader would make blob: URLs, refused by the CSP): run
   `scripts/unpack-glb.js` on any new model (tested).
 - Title and character (`title.js`, `avatar.js`, `select-state.js`, `session.js`, `flyin.js`, `gamepad.js`): the page opens on
@@ -76,7 +86,7 @@ No dependencies, no build step.
   camera down from the sky to behind the shoulder on the way in front of "your" house (`doorFor(name)`, stable per name).
   Shirt/hat/extra are local only: the server and other visitors know just name and look. Your own simulated guest
   agent is hidden (`people.update(…, me)`); you are the avatar. The wave is procedural (no clip): two bones turned
-  after the mixer. The soldier glb faces -Z: `loadRigs` turns it round.
+  after the mixer. The clips' skeleton faces -Z: `loadRigs` turns it round.
 - Controller and camera (`player.js`, `input.js`; the maths is pure and tested in `test/controller.test.js`):
   `locomotion.js` (`stepMotion`: acceleration, turn-rate limit; `blendSpace`: idle/walk/run weights and one shared stride
   phase so feet do not slide, from the clips' measured speeds in `CLIP`; `nextAnim`/`poseFor`: idle, fidget, walk, jog, run,
@@ -90,7 +100,7 @@ No dependencies, no build step.
   (`gesture.js`). C sits on the nearest free stool. `localStorage['xom.feel']` = '0' turns off the sprint FOV and the bob.
 - URL: `?che=di` straight into the street, `?che=ngam` straight to the overview (no title), `?live=1` livestream source
   (no buttons, no title, big clock, `xom.peti.vn` tag, music starts by itself), `?gio=`, `?troi=`, `?tua=`, `?chatluong=thap`.
-- Triangle budget: skinned characters are 11 k (soldier) and 28 k (michelle) triangles each, so only people within 24 m
+- Triangle budget: skinned characters are 35 k (remy) and 22 k (nathan) triangles each, so only people within 24 m
   of the focus (max 30, none in the overview) are skinned, and only the nearest 10 cast shadows (`people3d.js`).
 - Picture (`quality.js`, pure: tiers thap/vua/cao/toida, `pickTier`, `adapt`/`shed`; `?chatluong=` forces one,
   `localStorage['xom.quality']` keeps the visitor's choice): `post.js` (EffectComposer: scene into a half-float target

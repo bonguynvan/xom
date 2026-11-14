@@ -10,7 +10,7 @@ import { NODES, ROAD_HALF, ROAD_LINE, hourOf } from '../map.js';
 import { createMusic } from '../music.js';
 import { PLACES, POLES } from '../places.js';
 import { STOOL_CLUSTERS } from '../street-life.js';
-import { STEP_MS, createWorld, setWeather, stepWorld, syncGuests } from '../world.js';
+import { STEP_MS, createWorld, setBlockers, setWeather, stepWorld, syncGuests } from '../world.js';
 import { createAvatar } from './avatar.js';
 import { M, boxGrid, blockers, toX, toZ } from './coords.js';
 import { buildDecals } from './decals3d.js';
@@ -144,7 +144,7 @@ function advance(now) {
   let steps = 0;
   while (state.acc >= STEP_MS && steps < 40) {
     state.prev = state.world;
-    state.world = stepWorld(state.world);
+    state.world = stepWorld(setBlockers(state.world, state.blockers ?? [])); // you, walking: riders go round you
     state.acc -= STEP_MS;
     steps += 1;
   }
@@ -379,6 +379,9 @@ if (xom) {
   let wetness = 0;
   const frame = (now) => {
     perf?.begin(now);
+    // where you stand, for the riders (map units; your body is 0.3 m round, they give it a little more)
+    const walker = controls.state.mode === 'di' && !controls.state.fly && me.entered;
+    state.blockers = walker ? [{ x: (controls.state.pos.x - toX(0)) / M, y: (controls.state.pos.z - toZ(0)) / M, r: 3 }] : [];
     const dt = Math.min(0.1, advance(now));
     t += dt;
     const hour = hourOf(state.world.minute);

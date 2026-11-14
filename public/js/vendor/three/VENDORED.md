@@ -16,6 +16,7 @@ Copied from the npm package `three@0.170.0` (MIT, see LICENSE.txt), unmodified e
 Why: the CSP is `script-src 'self'`, so no CDN and no inline `<script type="importmap">`; the addons must import
 three by a relative path (checked in `test/coords3d.test.js`). To update, repeat the same copy and rewrite.
 
-Models in `public/models/` come from the three.js examples (Mixamo characters `Soldier.glb`, `Michelle.glb`,
-free to use under Mixamo's terms) and were passed through `scripts/unpack-glb.js` so their textures are plain
-files the CSP allows. `public/textures/waternormals.jpg` and `grass.jpg` (resized) are from the three.js examples.
+Models in `public/models/`: `clips.glb` is the skeleton and the Idle, Walk, Run and TPose animations of the
+three.js example `Soldier.glb` (a Mixamo character) with its meshes and pictures taken out; `remy.glb` is Mixamo's
+Remy (free to use under Mixamo's terms), converted with `scripts/fbx-to-glb.py`. Both were passed through
+`scripts/unpack-glb.js` so their textures are plain files the CSP allows. `public/textures/waternormals.jpg` and `grass.jpg` (resized) are from the three.js examples.

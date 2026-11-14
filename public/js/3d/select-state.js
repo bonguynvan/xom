@@ -30,12 +30,12 @@ export const EXTRAS = [
 
 /** How each look is built in 3D and what it wears until the visitor changes it. */
 export const LOOK_STYLE = {
-  aoDai: { rig: 'woman', height: 1.6, shirt: 'kem', hat: 'nonLa', extra: 'none' },
-  ongLoe: { rig: 'man', height: 1.72, shirt: 'troi', hat: 'none', extra: 'none' },
+  aoDai: { rig: 'man', height: 1.6, shirt: 'kem', hat: 'nonLa', extra: 'none' },
+  ongLoe: { rig: 'youth', height: 1.72, shirt: 'troi', hat: 'none', extra: 'none' },
   nongDan: { rig: 'man', height: 1.66, shirt: 'nau', hat: 'nonLa', extra: 'donGanh' },
-  congNhan: { rig: 'man', height: 1.7, shirt: 'cham', hat: 'muCoi', extra: 'tuiVai' },
-  toc: { rig: 'woman', height: 1.58, shirt: 'hong', hat: 'none', extra: 'tuiVai' },
-  boDoi: { rig: 'man', height: 1.7, shirt: 'reu', hat: 'muCoi', extra: 'none' },
+  congNhan: { rig: 'youth', height: 1.7, shirt: 'cham', hat: 'muCoi', extra: 'tuiVai' },
+  toc: { rig: 'man', height: 1.58, shirt: 'hong', hat: 'none', extra: 'tuiVai' },
+  boDoi: { rig: 'youth', height: 1.7, shirt: 'reu', hat: 'muCoi', extra: 'none' },
   cuDo: { rig: 'man', height: 1.62, shirt: 'kem', hat: 'muPhot', extra: 'khan' },
   treCon: { rig: 'man', height: 1.22, shirt: 'vang', hat: 'none', extra: 'none' },
 };

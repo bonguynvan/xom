@@ -68,7 +68,7 @@ test('vendored three.js modules import nothing by bare name (no importmap: the C
 });
 
 test('3D pages, models and their textures are served; models carry no embedded images (blob: is refused by the CSP)', () => {
-  for (const path of ['/index.html', '/js/3d/main3d.js', '/models/soldier.glb', '/models/michelle.glb', '/models/soldier-0.jpg', '/textures/grass.jpg']) assert.ok(resolvePath(path), path);
+  for (const path of ['/index.html', '/js/3d/main3d.js', '/models/clips.glb', '/models/remy.glb', '/models/remy-0.jpg', '/textures/grass.jpg']) assert.ok(resolvePath(path), path);
   const models = new URL('../public/models/', import.meta.url);
   for (const f of readdirSync(models).filter((n) => n.endsWith('.glb'))) {
     const data = readFileSync(new URL(f, models));

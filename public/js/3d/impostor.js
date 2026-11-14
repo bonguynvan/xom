@@ -1,5 +1,5 @@
 // The middle distance of the crowd: each person is a flat picture of a real character, taken from the same
-// two rigs as the people near you. At start-up every rig is drawn once from eight sides in four walking poses
+// rigs as the people near you. At start-up every rig is drawn once from eight sides in four walking poses
 // and one standing pose into a sheet; a person then costs two triangles and one instance of a single draw.
 // Which cell someone shows is crowd-plan.js cellOf (pure, tested).
 import * as THREE from '../vendor/three/three.module.min.js';
@@ -21,7 +21,7 @@ function bake(renderer, rigs) {
   const was = { target: renderer.getRenderTarget(), color: renderer.getClearColor(new THREE.Color()), alpha: renderer.getClearAlpha(), shadows: renderer.shadowMap.enabled };
   renderer.shadowMap.enabled = false;
   renderer.setClearColor(0x000000, 0);
-  [rigs.man, rigs.woman].forEach((rig, r) => {
+  [rigs.man, rigs.youth ?? rigs.man].forEach((rig, r) => { // the same order as people3d.js SHEET_HALF
     const model = SkeletonUtils.clone(rig.scene);
     model.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
     scene.add(model);

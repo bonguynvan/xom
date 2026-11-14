@@ -9,18 +9,18 @@ const BAND = 6; // metres of hysteresis at that border
 /** 'mid' or 'far' for someone `d` metres away who was `was` last frame: the border has a band, so nobody flickers on it. */
 export const tierOf = (d, was = 'far') => (d < MID_REACH - (was === 'mid' ? 0 : BAND / 2) ? 'mid' : d > MID_REACH + (was === 'mid' ? BAND / 2 : 0) ? 'far' : was);
 
-export const SHEET = { dirs: 8, frames: 4, rows: 5, cols: 16 }; // per rig: 8 directions across; 4 walk frames and an idle row up
+export const SHEET = { dirs: 8, frames: 4, rows: 5, cols: 16 }; // per rig (two of them): 8 directions across; 4 walk frames and an idle row up
 
 /**
  * Which cell of the sheet shows a person: they face `yaw` (0 = +Z, turning towards +X), the camera is at
- * angle `toCamera` from them (same convention), `phase` 0..1 through their stride, `woman` picks the right
- * half of the sheet. Returns { col, row }.
+ * angle `toCamera` from them (same convention), `phase` 0..1 through their stride, `rig` picks the part of
+ * the sheet: 0 the man (Remy), 1 the young man (Nathan). Returns { col, row }.
  */
-export function cellOf(yaw, toCamera, phase, moving, woman = false) {
+export function cellOf(yaw, toCamera, phase, moving, rig = 0) {
   const turn = ((toCamera - yaw) / (Math.PI * 2)) % 1;
   const dir = Math.round(((turn + 1) % 1) * SHEET.dirs) % SHEET.dirs;
   const row = moving ? Math.floor((((phase % 1) + 1) % 1) * SHEET.frames) % SHEET.frames : SHEET.frames;
-  return { col: dir + (woman ? SHEET.dirs : 0), row };
+  return { col: dir + SHEET.dirs * Number(rig), row };
 }
 
 /**

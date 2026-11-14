@@ -24,9 +24,9 @@ test('the sheet cell: front when they face the camera, back when they walk away,
   assert.equal(cellOf(0, -Math.PI / 2, 0, true).col, 6);
   assert.equal(cellOf(0, 0, 0.6, true).row, 2);
   assert.equal(cellOf(0, 0, 0.6, false).row, SHEET.frames, 'standing still: the idle row');
-  assert.equal(cellOf(0, 0, 0, true, true).col, SHEET.dirs, 'women are the right half of the sheet');
+  assert.equal(cellOf(0, 0, 0, true, 1).col, SHEET.dirs, 'the young man is the right half of the sheet');
   for (let k = -50; k < 50; k += 1) {
-    const c = cellOf(k * 0.37, k * 0.91, k * 0.13, k % 2 === 0, k % 3 === 0);
+    const c = cellOf(k * 0.37, k * 0.91, k * 0.13, k % 2 === 0, Math.abs(k) % 2);
     assert.ok(Number.isInteger(c.col) && c.col >= 0 && c.col < SHEET.cols && Number.isInteger(c.row) && c.row >= 0 && c.row < SHEET.rows, JSON.stringify(c));
   }
 });

@@ -14,7 +14,7 @@ test('every look the server knows has a 3D style, and every default is a real ch
   for (const look of GUEST_LOOKS) {
     const s = LOOK_STYLE[look.id];
     assert.ok(s, look.id);
-    assert.ok(['man', 'woman'].includes(s.rig));
+    assert.ok(['man', 'youth'].includes(s.rig)); // 'youth' falls back to 'man' when its model is not there
     assert.ok(s.height > 1 && s.height < 1.9);
     assert.ok(SHIRTS.some((c) => c.id === s.shirt) && HATS.some((h) => h.id === s.hat) && EXTRAS.some((e) => e.id === s.extra));
   }
@@ -67,7 +67,7 @@ test('the reducer: choosing, typing, submitting, and the server has the last wor
   assert.equal(reduce(s, { type: 'shirt', id: 'nope' }), s);
   assert.equal(reduce(s, { type: 'whatever' }), s);
   assert.equal(choiceOf(s).color, '#d8362f');
-  assert.equal(choiceOf(s).rig, 'man');
+  assert.equal(choiceOf(s).rig, 'youth');
 
   const next = reduce(s, { type: 'step', by: 1 }); // a new look comes in its own clothes
   assert.equal(next.look, 'nongDan');

@@ -1,4 +1,4 @@
-// Your own character, dressed: one of the two rigs, tinted by the shirt colour, with headwear (nón lá, mũ cối,
+// Your own character, dressed: one of the rigs, tinted by the shirt colour, with headwear (nón lá, mũ cối,
 // mũ phớt) and one thing carried (cloth bag, scarf, đòn gánh), all built in code. Used twice: on the plinth
 // of the title screen and in the street. The clips are blended by ground speed (locomotion.js blendSpace: walk
 // and run share one stride phase, so the feet do not slide); leaning, sitting, the head turning and the wave are
@@ -8,7 +8,7 @@ import * as SkeletonUtils from '../vendor/three/SkeletonUtils.js';
 import { STOOL_TOP } from './interact.js';
 import { swing, waveArm } from './gesture.js';
 import { CLIP, blendSpace } from './locomotion.js';
-import { donGanh, nonLa } from './people3d.js';
+import { donGanh, nonLa, tintable } from './people3d.js';
 
 const std = (color, roughness = 0.85, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, ...extra });
 
@@ -109,7 +109,7 @@ function makeBody(rig) {
   actions.idle.setEffectiveWeight(1);
   for (const name of ['walk', 'run']) actions[name].setEffectiveTimeScale(0); // their time is set from the stride phase
   const bones = Object.fromEntries(['RightArm', 'RightForeArm', 'Spine', 'Neck', 'Head', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg', 'Hips'].map((n) => [n, bone(root, new RegExp(`${n}$`))]));
-  return { rig, root, materials, hats, extras, mixer, actions, bones };
+  return { rig, root, materials: tintable(materials), hats, extras, mixer, actions, bones };
 }
 
 export function createAvatar(rigs) {
@@ -150,7 +150,7 @@ export function createAvatar(rigs) {
     const { speed = 0, pose = { lean: 0, look: 0, shift: 0, sit: 0, shuffle: 0 }, look: wanted = { yaw: 0, pitch: 0 } } = drive;
     clock += dt;
     const height = heightNow();
-    const blend = blendSpace(speed, height * body.rig.stride); // the woman's legs take the borrowed clips a little shorter
+    const blend = blendSpace(speed, height * body.rig.stride); // a rig whose legs take the clips shorter says so in its stride
     const walk = Math.max(blend.walk, pose.shuffle) * (1 - pose.sit);
     const run = blend.run * (1 - pose.sit);
     const period = blend.stride > 0 ? blend.period : CLIP.walk.seconds * 1.15; // turning on the spot: an easy shuffle
