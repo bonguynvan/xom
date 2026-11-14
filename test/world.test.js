@@ -264,3 +264,50 @@ test('careful riders never end up inside the rider in front, and a bump is follo
     }
   }
 });
+
+test('a visitor standing in the road: riders go round, or stop when there is no way round, and never ride through', async () => {
+  const { setBlockers } = await import('../public/js/world.js');
+  const { onRoad, roadAt, ROAD_LENGTH } = await import('../public/js/map.js');
+  const start = createWorld({ seed: 4, minute: 7.5 * 60 });
+  assert.equal(setBlockers(start, []), start, 'nobody in the road: the same world');
+  const free = run(start, 400);
+  assert.ok(free.agents.every((a) => a.dodge === undefined), 'and riders are as they always were');
+
+  // someone stands in the middle of the east-bound lane, half way along
+  const spot = onRoad(ROAD_LENGTH / 2, 8);
+  const at = roadAt(spot);
+  assert.ok(Math.abs(at.s - ROAD_LENGTH / 2) < 0.01 && Math.abs(at.side - 8) < 0.01, 'roadAt undoes onRoad');
+  let w = start;
+  let passed = 0;
+  let swerved = 0;
+  for (let k = 0; k < 2400; k += 1) {
+    const before = w;
+    w = stepWorld(setBlockers(w, [{ x: spot.x, y: spot.y, r: 3 }]), STEP_MS);
+    for (const a of w.agents) {
+      if (a.kind !== 'vehicle' || a.state !== 'drive') continue;
+      assert.ok(Math.hypot(a.x - spot.x, a.y - spot.y) > 3 + 2.5, `${a.name} rode through the visitor`);
+      const was = before.agents[a.i];
+      if (a.dir > 0 && was.state === 'drive' && was.s < at.s && a.s >= at.s) { passed += 1; if (Math.abs(a.dodge ?? 0) > 1) swerved += 1; }
+    }
+  }
+  assert.ok(passed > 20, `east-bound riders still get past: ${passed}`);
+  assert.ok(swerved > 5, `some by steering round: ${swerved}`);
+  const after = run(setBlockers(w, []), 200);
+  assert.ok(after.agents.filter((a) => a.kind === 'vehicle' && a.state === 'drive').every((a) => Math.abs(a.dodge ?? 0) < 0.01), 'once the road is clear they are back in their lanes');
+
+  // a row of people right across the east-bound side: nobody gets through, a queue forms
+  const wall = [-2, 4, 10, 16].map((side) => ({ ...onRoad(ROAD_LENGTH / 2, side), r: 3 }));
+  let blocked = start;
+  let through = 0;
+  for (let k = 0; k < 1600; k += 1) {
+    const before = blocked;
+    blocked = stepWorld(setBlockers(blocked, wall), STEP_MS);
+    for (const a of blocked.agents) {
+      const was = before.agents[a.i];
+      if (a.kind === 'vehicle' && a.dir > 0 && a.state === 'drive' && was.state === 'drive' && was.s < at.s && a.s >= at.s) through += 1;
+    }
+  }
+  assert.equal(through, 0, 'a blocked road stays blocked');
+  const held = blocked.agents.filter((a) => a.kind === 'vehicle' && a.state === 'drive' && a.dir > 0 && a.s < at.s && a.s > at.s - 200);
+  assert.ok(held.length >= 3, `riders wait behind the row: ${held.length}`);
+});

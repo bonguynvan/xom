@@ -5,67 +5,75 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Xóm Peti · nhạc lofi</title>
-  <meta name="description" content="Một xóm nhỏ nhìn từ trên cao, có nhạc lofi. Người trong xóm đi lại, nói chuyện theo giờ Việt Nam.">
+  <meta name="description" content="Xóm Peti dựng bằng 3D: nhà ống, đường tàu, ao làng, chợ, đình, hơn nghìn người đi lại theo giờ Việt Nam, có nhạc lofi. Bấm Đi dạo để tự đi trong xóm.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Peti">
   <meta property="og:url" content="https://xom.peti.vn/">
   <meta property="og:title" content="Xóm Peti · nhạc lofi">
-  <meta property="og:description" content="Một xóm nhỏ nhìn từ trên cao, có nhạc lofi. Người trong xóm đi lại, nói chuyện theo giờ Việt Nam.">
+  <meta property="og:description" content="Xóm Peti dựng bằng 3D: nhà ống, đường tàu, ao làng, chợ, đình, hơn nghìn người đi lại theo giờ Việt Nam, có nhạc lofi. Bấm Đi dạo để tự đi trong xóm.">
   <meta property="og:image" content="https://xom.peti.vn/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Toàn cảnh Xóm Peti nhìn từ trên cao">
+  <meta property="og:image:alt" content="Toàn cảnh Xóm Peti">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://xom.peti.vn/og.jpg">
-  <meta name="theme-color" content="#fff6e5">
+  <meta name="theme-color" content="#1d1a2f">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Be+Vietnam+Pro:wght@500;700;800&display=swap">
   <link rel="stylesheet" href="/css/xom.css">
-  <script type="module" src="/js/main.js"></script>
+  <script type="module" src="/js/3d/main3d.js"></script>
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="https://peti.vn" title="Các trò khác của Peti"><span class="brand-mark" aria-hidden="true"></span>Xóm <em>Peti</em></a>
+    <a class="brand" href="https://peti.vn" title="Các trò khác của Peti">Xóm <em>Peti</em></a>
     <span class="online" id="online" hidden aria-live="polite"></span>
-    <button type="button" class="join" id="join" hidden>🏠 Về xóm</button>
-    <button type="button" class="find" id="find-me" hidden>📍 Mình</button>
-    <button type="button" class="music" id="music" aria-pressed="false" title="Nhạc lofi tự sáng tác ngay trong trình duyệt">🎵 Bật nhạc</button>
-    <a class="github" href="https://github.com/bonguynvan/xom" target="_blank" rel="noopener" title="Mã nguồn mở, ai cũng đóng góp được">GitHub ↗</a>
+    <button type="button" class="btn" id="mode">🚶 Đi dạo</button>
+    <button type="button" class="btn" id="who" hidden>👤 Nhân vật</button>
+    <button type="button" class="btn" id="music" aria-pressed="false">🎵 Bật nhạc</button>
+    <button type="button" class="btn" id="sound" aria-pressed="false" title="Tiếng xe, tiếng rao, chim, mưa, bước chân (tổng hợp, không thu âm)">🔈 Tiếng phố</button>
+    <button type="button" class="btn feel" id="feel" aria-pressed="true" title="Góc nhìn rộng ra khi chạy và máy quay nhún nhẹ theo bước chân">🎥 Rung máy: bật</button>
+    <button type="button" class="btn quality" id="quality" title="Mức hình ảnh: tự động theo máy, hoặc tự chọn (áp dụng sau khi tải lại trang)">✨ Hình ảnh</button>
+    <a class="btn ghost" href="https://github.com/bonguynvan/xom" target="_blank" rel="noopener" title="Mã nguồn mở, ai cũng đóng góp được">GitHub ↗</a>
     <div class="clock" id="clock" aria-live="off">--:--</div>
   </header>
-
   <main class="stage">
-    <div class="loa" id="loa" hidden role="status">
-      <span class="loa-tag" aria-hidden="true">📢 Loa phường</span>
-      <span class="loa-window"><span class="loa-text" id="loa-text"></span></span>
+    <canvas id="scene" tabindex="0" aria-label="Xóm Peti dựng 3D. Kéo để xoay, lăn chuột để phóng to; bấm Đi dạo để tự đi bằng phím W A S D, E để chào, C để ngồi."></canvas>
+    <div class="bubbles" id="bubbles" aria-hidden="true"></div>
+    <div class="joystick" id="stick" aria-hidden="true"><span class="knob"></span></div>
+    <div class="joystick look" id="stick2" aria-hidden="true"><span class="knob"></span></div>
+    <div class="acts">
+      <button type="button" class="btn round" id="act-greet" aria-label="Chào người gần nhất" title="Chào (E)">👋</button>
+      <button type="button" class="btn round" id="act-sit" aria-label="Ngồi xuống ghế nhựa hoặc đứng dậy" title="Ngồi (C)">🪑</button>
     </div>
-    <canvas id="street" tabindex="0" aria-label="Bản đồ cả xóm. Kéo để xem quanh xóm, lăn chuột hoặc chụm hai ngón để phóng to."></canvas>
     <div class="splash" id="splash" role="status">
-      <p class="splash-title">Đang dọn xóm…</p>
-      <p class="splash-sub">Quét sân, kê ghế nhựa, gọi mọi người ra đường</p>
+      <p class="splash-title">Đang dựng xóm…</p>
+      <p class="splash-sub" id="splash-sub">Đong vữa, quét vôi</p>
       <span class="splash-dots" aria-hidden="true"><i></i><i></i><i></i></span>
     </div>
-    <p class="hint" id="hint">Kéo để xem quanh xóm · lăn chuột để phóng to</p>
-    <p class="live-tag" aria-hidden="true">xom.peti.vn</p>
-  </main>
-
-  <dialog class="join-dialog" id="join-dialog" aria-labelledby="join-title">
-    <form id="join-form">
-      <h2 id="join-title">🏠 Về xóm</h2>
-      <p class="join-lede">Nhân vật của bạn sẽ đi chợ, ngồi quán, tán chuyện với cả xóm cho tới khi bạn đóng trang. Ai đang xem cũng thấy bạn.</p>
-      <label class="join-label" for="join-name">Tên trong xóm</label>
-      <input id="join-name" maxlength="24" required autocomplete="nickname" spellcheck="false">
-      <fieldset class="join-looks">
-        <legend>Kiểu người</legend>
-        <div class="looks" id="join-looks"></div>
-      </fieldset>
-      <p class="join-error" id="join-error" hidden role="alert"></p>
-      <div class="join-actions">
-        <button type="button" class="btn-ghost" id="join-cancel">Thôi</button>
-        <button type="submit" class="btn-go" id="join-go">Vào xóm</button>
+    <section class="title" id="title" hidden role="dialog" aria-modal="false" aria-labelledby="title-h">
+      <canvas class="studio" id="studio" aria-label="Nhân vật của bạn trên bục xoay. Kéo để xoay."></canvas>
+      <div class="card">
+        <h1 id="title-h">Về xóm đi dạo</h1>
+        <p class="lede" id="title-lede">Chọn một dáng người, đặt tên, rồi bước ra ngõ.</p>
+        <fieldset><legend>Dáng người</legend><div class="chips" id="looks"></div></fieldset>
+        <fieldset><legend>Màu áo</legend><div class="chips" id="shirts"></div></fieldset>
+        <fieldset><legend>Đội đầu</legend><div class="chips" id="hats"></div></fieldset>
+        <fieldset><legend>Mang theo</legend><div class="chips" id="extras"></div></fieldset>
+        <label class="name-label" for="name">Tên trong xóm</label>
+        <div class="name-row">
+          <input id="name" maxlength="24" autocomplete="nickname" spellcheck="false" aria-describedby="name-error" enterkeyhint="go">
+          <button type="button" class="btn small" id="name-random">✨ Tên ngẫu nhiên</button>
+        </div>
+        <p class="error" id="name-error" role="alert" hidden></p>
+        <div class="actions">
+          <button type="button" class="btn ghost" id="title-watch">Chỉ ngắm thôi</button>
+          <button type="button" class="btn go" id="title-go">Vào xóm</button>
+        </div>
       </div>
-    </form>
-  </dialog>
+    </section>
+    <p class="live-tag" aria-hidden="true">xom.peti.vn</p>
+    <p class="hint" id="hint">Kéo để xoay · chuột phải (hoặc Shift + kéo) để dời · lăn chuột để phóng to</p>
+  </main>
 </body>
 </html>

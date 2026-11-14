@@ -14,12 +14,11 @@ npm test           # node:test, không cần cài gì
 
 - **Câu thoại**: `lines` trong `public/js/cast.js`, `GREETINGS`, `QUARRELS` (đụng nhau cãi nhau), `LOA_PHUONG`.
   Tiếng Việt đời thường, càng đúng chất những năm 90 càng tốt.
-- **Nhân vật mới**: vẽ painter trong `public/js/people90*.js` (quay mặt sang phải, gốc ở mặt đất, cao khoảng
-  100 đơn vị, **không có chữ** vì nhân vật bị lật gương khi đi sang trái), thêm vào `PAINTERS`
-  (`public/js/painters.js`) và một mục trong `CAST`.
+- **Nhân vật mới**: một mục trong `CAST` (`public/js/cast.js`): tên, tính cách, câu nói, nơi hay lui tới, màu áo.
+  Model 3D mới (rig Mixamo, `.glb`) bỏ vào `public/models/` rồi chạy `node scripts/unpack-glb.js`.
 - **Nhạc**: chỉnh bản nhạc trong `public/js/music-score.js` (hợp âm, giai điệu, tâm trạng theo giờ), hoặc góp một
   bản nhạc không lời bạn có quyền dùng dưới dạng `public/music/lofi.mp3` (ghi rõ nguồn và giấy phép trong PR).
-- **Chi tiết phố xá**: `public/js/facade.js` (mặt tiền nhà), `public/js/street-life.js`, `public/js/decor.js`.
+- **Chi tiết phố xá**: `public/js/3d/buildings3d.js` (nhà), `public/js/3d/props.js`, `public/js/3d/textures.js`, `public/js/street-life.js`.
 
 ## Quy ước
 

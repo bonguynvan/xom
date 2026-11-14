@@ -3,8 +3,11 @@
 // count (with the admin's announcement and maintenance switch) to every page, and keeps a small daily tally
 // (visits, peak watchers) for the peti.vn admin dashboard, which reads it over /api/ops/* with OPS_TOKEN.
 // A watcher may also "come home to the xóm" (POST /api/join with the private id its stream was given): it
-// gets a character with a name of its choosing that every page draws, until the page is closed.
+// gets a character with a name of its choosing that every page draws, until the page is closed. While it walks
+// it says where it is (POST /api/move, about ten times a second); the server checks every message (a guest, a
+// possible place, a possible speed, not too often) and passes the places on over the same streams.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { MIN_GAP_MS, cleanMove, withinReach } from '../public/js/3d/net-move.js';
 import { cleanName, lookById } from '../public/js/guests.js';
 import { KINDS } from './weather.js';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -20,6 +23,8 @@ const ANNOUNCE_MAX = 200;
 const MAX_GUESTS = 300; // visitors with a character in the xóm (every page draws them all)
 const GUESTS_PER_IP = 3;
 const REJOIN_MS = 5000; // changing name or look, at most this often
+const MOVES_PER_IP = 45; // move messages a second from one address (three guests at ten a second, and some slack)
+const RELAY_MS = 100; // places are passed on this often when anyone moved; slower when very many are watching
 const KICK_MS = 30 * 60 * 1000; // a guest the admin sends away cannot come back from that page or address for this long
 
 const vnDay = (ms) => new Date(ms + 7 * 3600 * 1000).toISOString().slice(0, 10); // days turn over at midnight in Vietnam
@@ -47,17 +52,54 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
   const bump = (fn) => { const day = today(); days = days.map((d) => (d.day === day ? fn(d) : d)); };
   const sky = () => (settings.weather === 'auto' ? weather() : { ...weather(), kind: settings.weather });
   const message = () => `data: ${JSON.stringify({ online: watchers.size, maintenance: settings.maintenance, announcement: settings.announcement,
-    weather: sky(), guests: guests().map(({ id, name, look }) => ({ id, name, look })) })}\n\n`;
+    weather: sky(), guests: guests().map(({ id, name, look, pos }) => ({ id, name, look, ...(pos ? { x: pos.x, y: pos.y, h: pos.h } : {}) })) })}\n\n`;
   const send = (w, text) => { if (w.res.writableLength > SLOW_CLIENT_BYTES) w.res.destroy(); else w.res.write(text); };
   const broadcast = () => { const text = message(); for (const w of watchers) send(w, text); };
   let pending = null;
   const soon = () => { if (!pending) pending = setTimeout(() => { pending = null; broadcast(); }, 1000); }; // at most once a second
+
+  // where the walking guests are: only those who moved since the last tick, to every open stream
+  const moved = new Set();
+  const moveRate = new Map(); // ip key -> { at, n } for the current second (memory only, pruned with the rest)
+  let relayAt = 0;
+  const relay = setInterval(() => {
+    const every = watchers.size > 2000 ? 500 : watchers.size > 500 ? 250 : RELAY_MS;
+    if (moved.size === 0 || now() - relayAt < every) return;
+    relayAt = now();
+    const list = [...moved].filter((w) => w.guest?.pos).map((w) => [w.guest.id, w.guest.pos.x, w.guest.pos.y, w.guest.pos.h, w.guest.pos.a]);
+    moved.clear();
+    if (list.length === 0) return;
+    const text = `event: moves\ndata: ${JSON.stringify(list)}\n\n`;
+    for (const w of watchers) send(w, text);
+  }, RELAY_MS);
+  relay.unref?.();
+
+  /** POST /api/move { sid, x, y, h, a }: where this page's character is now. Checked, never trusted. */
+  function move(input) {
+    const w = typeof input?.sid === 'string' ? bySid.get(input.sid) : null;
+    if (!w) return { status: 400, body: { error: 'Trang này chưa kết nối, tải lại trang nhé' } };
+    if (!w.guest) return { status: 403, body: { error: 'Chưa vào xóm' } };
+    const t = now();
+    const rate = moveRate.get(w.ip);
+    if (rate && t - rate.at < 1000) {
+      if (rate.n >= MOVES_PER_IP) return { status: 429, body: { error: 'Chậm lại' } };
+      rate.n += 1;
+    } else moveRate.set(w.ip, { at: t, n: 1 });
+    if (w.guest.pos && t - w.guest.pos.at < MIN_GAP_MS) return { status: 429, body: { error: 'Chậm lại' } };
+    const next = cleanMove(input);
+    if (!next) return { status: 400, body: { error: 'Vị trí không hợp lệ' } };
+    if (!withinReach(w.guest.pos, next, t)) return { status: 422, body: { error: 'Đi nhanh quá', x: w.guest.pos.x, y: w.guest.pos.y } };
+    w.guest.pos = { ...next, at: t };
+    moved.add(w);
+    return { status: 200, body: { ok: true } };
+  }
 
   const ping = setInterval(() => {
     for (const w of watchers) send(w, ': ping\n\n');
     const old = now() - VISIT_GAP_MS;
     for (const [key, at] of lastVisit) if (at < old) lastVisit.delete(key);
     for (const [key, until] of kicked) if (until < now()) kicked.delete(key);
+    for (const [key, rate] of moveRate) if (now() - rate.at > 2000) moveRate.delete(key);
   }, PING_MS);
   if (file) store(file, days); // fail loudly at start-up if the stats cannot be written
   const save = file ? setInterval(() => store(file, days), 5 * 60 * 1000) : null;
@@ -106,7 +148,7 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
       if (guests().length >= MAX_GUESTS) return { status: 429, body: { error: 'Xóm đông quá rồi, lát quay lại nhé' } };
       if (guests().filter((g) => g.ip === w.ip).length >= GUESTS_PER_IP) return { status: 429, body: { error: 'Nhà bạn đã có đủ người trong xóm' } };
     }
-    w.guest = { id: w.guest?.id ?? `g${nextGuest++}`, name, look: look.id, ip: w.ip, since: w.guest?.since ?? now() };
+    w.guest = { id: w.guest?.id ?? `g${nextGuest++}`, name, look: look.id, ip: w.ip, since: w.guest?.since ?? now(), pos: null }; // coming in (again) starts from no place
     w.joinedAt = now();
     soon();
     return { status: 200, body: { id: w.guest.id, name, look: look.id } };
@@ -168,13 +210,14 @@ export function createLive({ token = '', file = null, now = () => Date.now(), st
 
   const close = () => {
     clearInterval(ping);
+    clearInterval(relay);
     if (save) clearInterval(save);
     if (pending) clearTimeout(pending);
     if (file) store(file, days);
     for (const w of watchers) w.res.end();
   };
 
-  return { watch, join, leave, kick, overview, updateSettings, authorized, opsOn, close, weatherChanged: soon, online: () => watchers.size, guestCount: () => guests().length };
+  return { watch, join, leave, move, kick, overview, updateSettings, authorized, opsOn, close, weatherChanged: soon, online: () => watchers.size, guestCount: () => guests().length };
 }
 
 /** The last 30 days, one entry each, zeros for the days nobody came. */

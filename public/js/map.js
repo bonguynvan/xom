@@ -83,6 +83,22 @@ export function onRoad(s, side = 0) {
   return { x: a.x + (b.x - a.x) * t - ty * side, y: a.y + (b.y - a.y) * t + tx * side };
 }
 
+/** The other way round: where a point is on the road, as { s, side } (`onRoad(s, side)` gives the point back). */
+export function roadAt(p) {
+  let best = { s: 0, side: 0, d: Infinity };
+  for (let k = 1; k < ROAD_LINE.length; k += 1) {
+    const [a, b] = [ROAD_LINE[k - 1], ROAD_LINE[k]];
+    const seg = roadLengths[k] - roadLengths[k - 1] || 1;
+    const tx = (b.x - a.x) / seg;
+    const ty = (b.y - a.y) / seg;
+    const along = Math.max(0, Math.min(seg, (p.x - a.x) * tx + (p.y - a.y) * ty));
+    const side = (p.y - a.y) * tx - (p.x - a.x) * ty;
+    const d = Math.hypot(p.x - (a.x + tx * along), p.y - (a.y + ty * along));
+    if (d < best.d) best = { s: roadLengths[k - 1] + along, side, d };
+  }
+  return { s: best.s, side: best.side };
+}
+
 // ---------------- alleys ----------------
 
 const ALLEYS = [

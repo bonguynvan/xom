@@ -287,7 +287,7 @@ const TRAFFIC = [
     id: `xeMay${k}`, painter: 'xeOm', kind: 'vehicle', names: Array.from({ length: 22 }, (_, n) => `Xe máy ${k * 22 + n + 1}`),
     color, speed: 52 + k * 3, size: 86, bio: 'Người đi làm, đi chợ, đưa con đi học trên con Cub.', look: { skin: '#d8a477', eyes: 'dot', mouth: 'flat' }, lines: RIDER_LINES })),
   ...['#c94f3d', '#2d9cdb', '#3f8f6b'].map((color, k) => ({
-    id: `xeDap${k}`, painter: 'coGiao', kind: 'vehicle', names: Array.from({ length: 14 }, (_, n) => `Xe đạp ${k * 14 + n + 1}`),
+    id: `xeDap${k}`, painter: 'coGiao', kind: 'vehicle', names: Array.from({ length: 4 }, (_, n) => `Xe đạp ${k * 4 + n + 1}`),
     color: '#f4f1ea', speed: 30 + k * 3, size: 86, bio: 'Đạp xe đi làm, đi học.', look: { skin: '#f2cdb0', eyes: 'round', mouth: 'smile' }, lines: ['Kính coong!', 'Muộn học rồi!'] })),
 ];
 

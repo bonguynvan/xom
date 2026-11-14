@@ -8,7 +8,7 @@ import { HEADERS, handler, resolvePath } from '../scripts/serve.js';
 
 test('paths stay inside public/', () => {
   assert.match(resolvePath('/'), /index\.html$/);
-  assert.match(resolvePath('/js/main.js?v=1'), /main\.js$/);
+  assert.match(resolvePath('/js/3d/main3d.js?v=1'), /main3d\.js$/);
   const publicDir = resolve(fileURLToPath(new URL('../public', import.meta.url)));
   for (const evil of ['/../package.json', '/..%2fpackage.json', '/%2e%2e/%2e%2e/etc/passwd', '/js/..\\..\\package.json', '/%00', '/%E0%A4%A']) {
     const file = resolvePath(evil);
@@ -35,6 +35,9 @@ test('serves the page with a strict CSP and refuses traversal and writes', async
 
   assert.equal((await fetch(`${base}/..%2f..%2fpackage.json`)).status, 404);
   assert.equal((await fetch(`${base}/nope.js`)).status, 404);
+  const old3d = await fetch(`${base}/3d.html`, { redirect: 'manual' });
+  assert.equal(old3d.status, 301);
+  assert.equal(old3d.headers.get('location'), '/');
   const og = await fetch(`${base}/og.jpg`);
   assert.equal(og.status, 200, 'the share image');
   assert.equal(og.headers.get('content-type'), 'image/jpeg');
